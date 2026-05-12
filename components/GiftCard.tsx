@@ -14,10 +14,11 @@
 
 'use client'
 
-import { useState }   from 'react'
-import Image          from 'next/image'
-import { tokens }     from '@/tokens'
-import type { WishlistItem } from '@/types/wishlist'
+import { useState }              from 'react'
+import Image                     from 'next/image'
+import { tokens }                from '@/tokens'
+import { shouldSkipSkimlinks }   from '@/lib/affiliate'
+import type { WishlistItem }     from '@/types/wishlist'
 
 // ── Retailer → fallback emoji ─────────────────────────────────────────────────
 // Matches on a substring of the normalised retailer string so "amazon.com"
@@ -115,6 +116,10 @@ export function GiftCard({ item }: GiftCardProps) {
 
   const isClaimed  = item.is_claimed
   const buyUrl     = item.affiliate_url ?? item.source_url
+  // Exclude Amazon links from Skimlinks rewriting — they already carry our
+  // Associates tag (applied server-side in lib/affiliate.ts). Skimlinks
+  // respects the data-skimlinks-excluded attribute and skips those anchors.
+  const excludeFromSkimlinks = shouldSkipSkimlinks(buyUrl)
   const retailerLabel = item.retailer
     ? item.retailer.charAt(0).toUpperCase() + item.retailer.slice(1)
     : 'Store'
@@ -297,11 +302,24 @@ export function GiftCard({ item }: GiftCardProps) {
           </div>
 
         ) : (
-          /* Default state: Buy on [Retailer] button → external link */
+          /* Default state: Buy on [Retailer] button → external link.
+           *
+           * SKIMLINKS STRATEGY:
+           *   - Plain <a href> tags (not onClick handlers) are required so
+           *     Skimlinks can detect and rewrite non-Amazon links at click time.
+           *   - Amazon links get data-skimlinks-excluded="true" so Skimlinks
+           *     leaves them alone — our Associates tag is already applied.
+           *   - Non-Amazon links have no exclusion attribute, so Skimlinks
+           *     will rewrite them with its own affiliate tracking.
+           */}
           <a
             href={buyUrl}
             target="_blank"
             rel="noopener noreferrer"
+            {...(excludeFromSkimlinks
+              ? { 'data-skimlinks-excluded': 'true' }
+              : {}
+            )}
             className="flex items-center justify-center gap-1.5 w-full rounded-lg transition-opacity hover:opacity-85 active:scale-[0.98]"
             style={{
               fontSize:        '11.5px',

@@ -26,6 +26,26 @@
 
 import type { WishlistItem } from '@/types/wishlist'
 
+// ── shouldSkipSkimlinks ───────────────────────────────────────────────────────
+
+/**
+ * Returns true for URLs that Skimlinks should NOT rewrite.
+ *
+ * Currently: Amazon URLs only, because they are already monetised server-side
+ * via the Associates tag. Double-rewriting would:
+ *   1. Strip our Associates tag → lose that commission stream
+ *   2. Potentially breach Amazon Associates ToS (no sub-affiliate layering)
+ *
+ * Usage in GiftCard: add data-skimlinks-excluded="true" to the anchor when
+ * this returns true. Skimlinks respects that attribute universally.
+ *
+ * Extend this function if you ever add other programs that conflict with
+ * Skimlinks (e.g. a direct Walmart affiliate deal).
+ */
+export function shouldSkipSkimlinks(url: string): boolean {
+  return isAmazonUrl(url)
+}
+
 // ── Amazon domain detection ───────────────────────────────────────────────────
 // Matches every Amazon storefront TLD we want to monetise.
 // Add rows here as you expand to new markets.
