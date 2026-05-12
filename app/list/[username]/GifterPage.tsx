@@ -64,7 +64,7 @@ export default function GifterPage({ user, items: initialItems }: GifterPageProp
   const allTags = useMemo<string[]>(() => {
     const seen = new Set<string>()
     items.forEach((item) => item.dna_tags.forEach((t) => seen.add(t)))
-    return [...seen]
+    return Array.from(seen)
   }, [items])
 
   // Apply tag filter client-side — no re-fetch needed
