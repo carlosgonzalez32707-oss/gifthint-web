@@ -329,7 +329,7 @@ export function GiftCard({ item, wisherUserId, gifterPageUsername }: GiftCardPro
            *     leaves them alone — our Associates tag is already applied.
            *   - Non-Amazon links have no exclusion attribute, so Skimlinks
            *     will rewrite them with its own affiliate tracking.
-           */}
+           */
           <a
             href={buyUrl}
             target="_blank"

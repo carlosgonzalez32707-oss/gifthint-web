@@ -26,11 +26,13 @@ export type WishUser = Pick<DbUser,
 
 export type WishItem = Pick<DbWishlistItem,
   | 'id'
+  | 'user_id'
   | 'title'
   | 'price'
   | 'currency'
   | 'image_url'
   | 'source_url'
+  | 'original_url'
   | 'affiliate_url'
   | 'retailer'
   | 'hint'
@@ -154,11 +156,13 @@ export default async function Page({ params }: RouteProps) {
     .from('wishlist_items')
     .select(`
       id,
+      user_id,
       title,
       price,
       currency,
       image_url,
       source_url,
+      original_url,
       affiliate_url,
       retailer,
       hint,
