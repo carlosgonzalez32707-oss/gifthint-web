@@ -14,11 +14,13 @@
 
 'use client'
 
-import { useState }              from 'react'
-import Image                     from 'next/image'
-import { tokens }                from '@/tokens'
-import { shouldSkipSkimlinks }   from '@/lib/affiliate'
-import type { WishlistItem }     from '@/types/wishlist'
+import { useState, useCallback }  from 'react'
+import Image                      from 'next/image'
+import { tokens }                 from '@/tokens'
+import { shouldSkipSkimlinks }    from '@/lib/affiliate'
+import { trackBuyClick,
+         inferAffiliateNetwork }  from '@/lib/analytics'
+import type { WishlistItem }      from '@/types/wishlist'
 
 // ── Retailer → fallback emoji ─────────────────────────────────────────────────
 // Matches on a substring of the normalised retailer string so "amazon.com"
@@ -107,10 +109,14 @@ function ExternalLinkIcon() {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface GiftCardProps {
-  item: WishlistItem
+  item:               WishlistItem
+  /** UUID of the wishlist owner — passed through for click attribution */
+  wisherUserId:       string
+  /** Public username slug — used to identify the gifter page in analytics */
+  gifterPageUsername: string
 }
 
-export function GiftCard({ item }: GiftCardProps) {
+export function GiftCard({ item, wisherUserId, gifterPageUsername }: GiftCardProps) {
   // Track image load failures so we can swap in the emoji fallback
   const [imgError, setImgError] = useState(false)
 
@@ -132,6 +138,18 @@ export function GiftCard({ item }: GiftCardProps) {
     : null
 
   const showImage = !!item.image_url && !imgError
+
+  // Fire-and-forget click tracking — never awaited, never blocks navigation.
+  // keepalive:true in trackBuyClick ensures the request survives tab navigation.
+  const handleBuyClick = useCallback(() => {
+    trackBuyClick({
+      itemId:             item.id,
+      wisherUserId,
+      retailer:           item.retailer ?? 'unknown',
+      affiliateNetwork:   inferAffiliateNetwork(buyUrl),
+      gifterPageUsername,
+    })
+  }, [item.id, item.retailer, wisherUserId, buyUrl, gifterPageUsername])
 
   return (
     <article
@@ -316,6 +334,7 @@ export function GiftCard({ item }: GiftCardProps) {
             href={buyUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={handleBuyClick}
             {...(excludeFromSkimlinks
               ? { 'data-skimlinks-excluded': 'true' }
               : {}

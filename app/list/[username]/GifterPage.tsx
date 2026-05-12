@@ -16,10 +16,12 @@
 
 'use client'
 
-import { useState, useMemo }        from 'react'
-import { createClient }             from '@supabase/supabase-js'
-import { tokens }                   from '@/tokens'
-import type { WishUser, WishItem }  from './page'
+import { useState, useMemo, useCallback } from 'react'
+import { createClient }                   from '@supabase/supabase-js'
+import { tokens }                         from '@/tokens'
+import { trackBuyClick,
+         inferAffiliateNetwork }          from '@/lib/analytics'
+import type { WishUser, WishItem }        from './page'
 
 // ── Browser Supabase client (anon key — safe to expose) ───────────────────────
 // Only used for claim mutations; reads are handled server-side in page.tsx.
@@ -145,7 +147,12 @@ export default function GifterPage({ user, items: initialItems }: GifterPageProp
           />
         )}
 
-        <GiftGrid items={visibleItems} onClaim={handleClaim} />
+        <GiftGrid
+          items={visibleItems}
+          onClaim={handleClaim}
+          wisherUserId={user.id}
+          gifterPageUsername={user.public_username ?? ''}
+        />
 
         <ReminderSignup
           name={name}
@@ -337,9 +344,13 @@ function TagPill({
 function GiftGrid({
   items,
   onClaim,
+  wisherUserId,
+  gifterPageUsername,
 }: {
-  items:   WishItem[]
-  onClaim: (id: string, name: string, anon: boolean) => Promise<void>
+  items:              WishItem[]
+  onClaim:            (id: string, name: string, anon: boolean) => Promise<void>
+  wisherUserId:       string
+  gifterPageUsername: string
 }) {
   if (items.length === 0) {
     return (
@@ -359,7 +370,13 @@ function GiftGrid({
     <section className="px-4 pb-16">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {items.map((item) => (
-          <GiftCard key={item.id} item={item} onClaim={onClaim} />
+          <GiftCard
+            key={item.id}
+            item={item}
+            onClaim={onClaim}
+            wisherUserId={wisherUserId}
+            gifterPageUsername={gifterPageUsername}
+          />
         ))}
       </div>
     </section>
@@ -373,14 +390,31 @@ function GiftGrid({
 function GiftCard({
   item,
   onClaim,
+  wisherUserId,
+  gifterPageUsername,
 }: {
-  item:    WishItem
-  onClaim: (id: string, name: string, anon: boolean) => Promise<void>
+  item:               WishItem
+  onClaim:            (id: string, name: string, anon: boolean) => Promise<void>
+  wisherUserId:       string
+  gifterPageUsername: string
 }) {
   const [claiming,   setClaiming]   = useState(false)
   const [claimName,  setClaimName]  = useState('')
   const [anonymous,  setAnonymous]  = useState(false)
   const [submitting, setSubmitting] = useState(false)
+
+  // Fire-and-forget click tracking when gifter taps "I'll buy this"
+  const handleBuyClick = useCallback(() => {
+    const buyUrl = item.affiliate_url ?? item.source_url
+    trackBuyClick({
+      itemId:             item.id,
+      wisherUserId,
+      retailer:           item.retailer ?? 'unknown',
+      affiliateNetwork:   inferAffiliateNetwork(buyUrl),
+      gifterPageUsername,
+    })
+  }, [item.id, item.retailer, item.affiliate_url, item.source_url,
+      wisherUserId, gifterPageUsername])
 
   async function submitClaim() {
     setSubmitting(true)
@@ -589,7 +623,7 @@ function GiftCard({
         ) : (
           /* Idle — primary CTA */
           <button
-            onClick={() => setClaiming(true)}
+            onClick={() => { handleBuyClick(); setClaiming(true) }}
             className="w-full py-2.5 rounded-xl text-sm font-bold transition-opacity hover:opacity-85 active:scale-[0.98]"
             style={{ background: tokens.colors.purple, color: '#fff' }}
           >

@@ -75,10 +75,12 @@ function cn(...parts: (string | false | null | undefined)[]): string {
 // ── GiftGrid ──────────────────────────────────────────────────────────────────
 
 interface GiftGridProps {
-  items: WishlistItem[]
+  items:              WishlistItem[]
+  wisherUserId:       string
+  gifterPageUsername: string
 }
 
-export function GiftGrid({ items }: GiftGridProps) {
+export function GiftGrid({ items, wisherUserId, gifterPageUsername }: GiftGridProps) {
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all')
 
   const currentFilter = FILTERS.find((f) => f.key === activeFilter) ?? FILTERS[0]
@@ -123,7 +125,12 @@ export function GiftGrid({ items }: GiftGridProps) {
           }}
         >
           {visibleItems.map((item) => (
-            <GiftCard key={item.id} item={item} />
+            <GiftCard
+              key={item.id}
+              item={item}
+              wisherUserId={wisherUserId}
+              gifterPageUsername={gifterPageUsername}
+            />
           ))}
         </div>
       )}
