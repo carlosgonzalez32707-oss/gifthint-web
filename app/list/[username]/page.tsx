@@ -10,6 +10,7 @@ import type { Metadata, ResolvingMetadata } from 'next'
 import { notFound }                          from 'next/navigation'
 import { createServerClient }                from '@/lib/supabase-server'
 import type { DbUser, DbWishlistItem }       from '@/lib/supabase-server'
+import { rewriteAmazonUrls }                 from '@/lib/affiliate'
 import GifterPage                            from './GifterPage'
 
 // ── Shared prop types ─────────────────────────────────────────────────────────
@@ -30,6 +31,7 @@ export type WishItem = Pick<DbWishlistItem,
   | 'currency'
   | 'image_url'
   | 'source_url'
+  | 'affiliate_url'
   | 'retailer'
   | 'hint'
   | 'dna_tags'
@@ -157,6 +159,7 @@ export default async function Page({ params }: RouteProps) {
       currency,
       image_url,
       source_url,
+      affiliate_url,
       retailer,
       hint,
       dna_tags,
@@ -175,10 +178,18 @@ export default async function Page({ params }: RouteProps) {
     console.error('[GiftHint] page fetch items error:', itemsError.message)
   }
 
+  // Rewrite Amazon URLs with Associates tag — server-side only.
+  // See lib/affiliate.ts for the compliance rationale.
+  const associatesTag = process.env.AMAZON_ASSOCIATES_TAG ?? ''
+  const rewrittenItems = rewriteAmazonUrls(
+    (items ?? []) as WishItem[],
+    associatesTag,
+  )
+
   return (
     <GifterPage
-      user={user   as WishUser}
-      items={items as WishItem[] ?? []}
+      user={user as WishUser}
+      items={rewrittenItems}
     />
   )
 }
