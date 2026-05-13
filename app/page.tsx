@@ -14,6 +14,7 @@
  */
 
 import type { Metadata } from 'next'
+import type { ReactNode } from 'react'
 import { tokens } from '@/tokens'
 
 // ── Metadata ──────────────────────────────────────────────────────────────────
@@ -36,79 +37,325 @@ const APP_URL          = process.env.NEXT_PUBLIC_APP_URL ?? 'https://gifthint.io
 
 // ── Inline helpers (no extra component files needed for a single-page route) ──
 
-function Step({
-  number,
-  icon,
-  title,
-  body,
+/** Shared browser-chrome wrapper used by all three step mockups */
+function BrowserFrame({
+  url,
+  children,
 }: {
-  number: number
-  icon:   string
-  title:  string
-  body:   string
+  url: string
+  children: ReactNode
 }) {
   return (
     <div
       style={{
-        display:        'flex',
-        flexDirection:  'column',
-        alignItems:     'flex-start',
-        gap:            '12px',
-        flex:           '1 1 220px',
-        minWidth:       '0',
-        padding:        '28px 24px',
-        background:     tokens.colors.surface,
-        border:         `1px solid ${tokens.colors.border}`,
-        borderRadius:   tokens.radius.xl,
+        borderRadius: '12px',
+        overflow:     'hidden',
+        border:       `1px solid ${tokens.colors.borderSoft}`,
+        background:   tokens.colors.surface,
+        boxShadow:    '0 16px 48px rgba(0,0,0,0.55)',
+        userSelect:   'none',
       }}
     >
-      {/* Step number + icon row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <span
+      {/* Traffic-light bar */}
+      <div
+        style={{
+          display:        'flex',
+          alignItems:     'center',
+          gap:            '6px',
+          padding:        '9px 12px',
+          background:     tokens.colors.surface2,
+          borderBottom:   `1px solid ${tokens.colors.border}`,
+        }}
+      >
+        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#FF5F57', display: 'block' }} />
+        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#FFBD2E', display: 'block' }} />
+        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#28CA41', display: 'block' }} />
+        <div
           style={{
-            display:        'inline-flex',
-            alignItems:     'center',
-            justifyContent: 'center',
-            width:          '22px',
-            height:         '22px',
-            borderRadius:   '50%',
-            background:     tokens.colors.purpleDim,
-            border:         `1px solid ${tokens.colors.purpleRing}`,
-            fontSize:       '10px',
-            fontWeight:     800,
-            color:          tokens.colors.purple,
-            flexShrink:     0,
+            flex:         1,
+            background:   tokens.colors.surface3,
+            borderRadius: '6px',
+            padding:      '3px 10px',
+            marginLeft:   '8px',
+            fontSize:     '10px',
+            color:        tokens.colors.muted,
+            overflow:     'hidden',
+            whiteSpace:   'nowrap',
+            textOverflow: 'ellipsis',
           }}
         >
-          {number}
-        </span>
-        <span style={{ fontSize: '26px', lineHeight: 1 }} aria-hidden="true">
-          {icon}
-        </span>
+          {url}
+        </div>
+      </div>
+      {/* Page content */}
+      <div style={{ padding: '0' }}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+/** Step 1 mockup — Chrome Web Store extension listing */
+function InstallMockup() {
+  return (
+    <BrowserFrame url="chrome.google.com/webstore">
+      <div style={{ padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {/* Extension header row */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+          {/* Icon */}
+          <div
+            style={{
+              width: 56, height: 56, borderRadius: '12px',
+              background: 'linear-gradient(135deg, #8B83F0 0%, #c4b5fd 100%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '26px', flexShrink: 0,
+            }}
+          >
+            🎁
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: '13px', color: tokens.colors.text }}>GiftHint — Wishlist Saver</p>
+            <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#4EC99A' }}>gifthint.io</p>
+            {/* Stars */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+              {'★★★★★'.split('').map((s, i) => (
+                <span key={i} style={{ fontSize: '11px', color: '#F5A94E' }}>{s}</span>
+              ))}
+              <span style={{ fontSize: '10px', color: tokens.colors.muted, marginLeft: '2px' }}>4.9 (1,024)</span>
+            </div>
+          </div>
+          {/* CTA */}
+          <div
+            style={{
+              background: '#1A73E8', color: '#fff',
+              borderRadius: '4px', padding: '7px 14px',
+              fontSize: '12px', fontWeight: 700, flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(26,115,232,0.4)',
+            }}
+          >
+            Add to Chrome
+          </div>
+        </div>
+        {/* Divider */}
+        <div style={{ height: 1, background: tokens.colors.border }} />
+        {/* Feature bullets */}
+        {[
+          '♥  Save any product with one click',
+          '🔗  Shareable wishlist link — no account for viewers',
+          '🛡  No duplicate gifts — items get claimed',
+        ].map((text) => (
+          <p key={text} style={{ margin: 0, fontSize: '11.5px', color: tokens.colors.muted, lineHeight: 1.5 }}>
+            {text}
+          </p>
+        ))}
+      </div>
+    </BrowserFrame>
+  )
+}
+
+/** Step 2 mockup — product page with floating heart button */
+function ProductMockup() {
+  return (
+    <BrowserFrame url="amazon.com/dp/B0EXAMPLE">
+      <div style={{ display: 'flex', gap: '0', fontSize: '11px' }}>
+        {/* Product image area */}
+        <div
+          style={{
+            width: '44%', flexShrink: 0, aspectRatio: '1',
+            background: 'linear-gradient(135deg, #1C1C22 0%, #242430 100%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            position: 'relative',
+          }}
+        >
+          {/* Product placeholder */}
+          <span style={{ fontSize: '42px', opacity: 0.6 }}>👟</span>
+          {/* Floating heart button */}
+          <div
+            style={{
+              position: 'absolute', bottom: '10px', right: '10px',
+              width: '36px', height: '36px',
+              background: 'rgba(244,114,182,0.95)',
+              borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 3px 12px rgba(244,114,182,0.55)',
+              fontSize: '16px', cursor: 'pointer',
+            }}
+          >
+            ♥
+          </div>
+          {/* "Saved!" toast */}
+          <div
+            style={{
+              position: 'absolute', top: '10px', left: '50%',
+              transform: 'translateX(-50%)',
+              background: tokens.colors.surface,
+              border: `1px solid ${tokens.colors.greenRing}`,
+              borderRadius: '999px',
+              padding: '4px 10px',
+              display: 'flex', alignItems: 'center', gap: '5px',
+              whiteSpace: 'nowrap',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+            }}
+          >
+            <span style={{ fontSize: '10px', color: tokens.colors.green }}>✓</span>
+            <span style={{ fontSize: '10px', color: tokens.colors.text, fontWeight: 600 }}>Saved to GiftHint!</span>
+          </div>
+        </div>
+        {/* Product details */}
+        <div style={{ flex: 1, padding: '14px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <p style={{ margin: 0, fontWeight: 700, fontSize: '12px', color: tokens.colors.text, lineHeight: 1.4 }}>
+            Nike Air Max 270 React — White/Black
+          </p>
+          <p style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: tokens.colors.green }}>$129.99</p>
+          <div style={{ height: 1, background: tokens.colors.border }} />
+          {/* Fake rating */}
+          <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+            {'★★★★☆'.split('').map((s, i) => (
+              <span key={i} style={{ fontSize: '10px', color: '#F5A94E' }}>{s}</span>
+            ))}
+            <span style={{ fontSize: '10px', color: tokens.colors.muted }}>4,381</span>
+          </div>
+          {/* Fake ATC button */}
+          <div
+            style={{
+              background: '#F5A94E', borderRadius: '8px',
+              padding: '7px 10px', textAlign: 'center',
+              fontSize: '11px', fontWeight: 700, color: '#000',
+            }}
+          >
+            Add to Cart
+          </div>
+        </div>
+      </div>
+    </BrowserFrame>
+  )
+}
+
+/** Step 3 mockup — the gifthint list page a friend would see */
+function GiftListMockup() {
+  const cards = [
+    { emoji: '👟', name: 'Nike Air Max 270', price: '$129.99', claimed: false },
+    { emoji: '📚', name: 'Atomic Habits', price: '$18.00', claimed: true  },
+    { emoji: '🎧', name: 'Sony WH-1000XM5', price: '$348.00', claimed: false },
+  ]
+  return (
+    <BrowserFrame url="gifthint.io/list/yourname">
+      <div style={{ padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {/* Profile row */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+          <div
+            style={{
+              width: 40, height: 40, borderRadius: '50%',
+              background: tokens.colors.purpleDim,
+              border: `2px solid ${tokens.colors.purple}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '16px',
+            }}
+          >
+            😊
+          </div>
+          <p style={{ margin: 0, fontWeight: 800, fontSize: '13px', color: tokens.colors.text }}>Alex&apos;s Gift List</p>
+          {/* Copy link button */}
+          <div
+            style={{
+              display: 'flex', alignItems: 'center', gap: '5px',
+              background: tokens.colors.purpleDim,
+              border: `1px solid ${tokens.colors.purpleRing}`,
+              borderRadius: '999px', padding: '4px 12px',
+            }}
+          >
+            <span style={{ fontSize: '10px' }}>🔗</span>
+            <span style={{ fontSize: '10px', color: tokens.colors.purple, fontWeight: 600 }}>Copy gift list link</span>
+          </div>
+        </div>
+        {/* Gift cards */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {cards.map((c) => (
+            <div
+              key={c.name}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                background: tokens.colors.surface2,
+                borderRadius: '8px', padding: '8px 10px',
+                opacity: c.claimed ? 0.45 : 1,
+                border: `1px solid ${tokens.colors.border}`,
+              }}
+            >
+              <span style={{ fontSize: '18px', flexShrink: 0 }}>{c.emoji}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: '11px', fontWeight: 600, color: tokens.colors.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</p>
+                <p style={{ margin: 0, fontSize: '10px', color: c.claimed ? tokens.colors.muted : tokens.colors.green }}>{c.claimed ? '✓ Claimed' : c.price}</p>
+              </div>
+              {!c.claimed && (
+                <div style={{ background: tokens.colors.purple, borderRadius: '6px', padding: '3px 8px', fontSize: '10px', color: '#fff', fontWeight: 700, flexShrink: 0 }}>
+                  Buy
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </BrowserFrame>
+  )
+}
+
+/** A single illustrated step row (image above on mobile, side-by-side on desktop) */
+function StepRow({
+  number,
+  title,
+  body,
+  mockup,
+  flip = false,
+}: {
+  number: number
+  title:  string
+  body:   string
+  mockup: ReactNode
+  flip?:  boolean
+}) {
+  return (
+    <div
+      style={{
+        display:       'flex',
+        flexWrap:      'wrap',
+        alignItems:    'center',
+        gap:           '32px',
+        flexDirection: flip ? 'row-reverse' : 'row',
+      }}
+    >
+      {/* Mockup — grows to fill half the width on wide screens */}
+      <div style={{ flex: '1 1 280px', minWidth: '0' }}>
+        {mockup}
       </div>
 
-      <p
-        style={{
-          margin:     0,
-          fontSize:   '14px',
-          fontWeight: 700,
-          color:      tokens.colors.text,
-          lineHeight: 1.3,
-        }}
-      >
-        {title}
-      </p>
-
-      <p
-        style={{
-          margin:     0,
-          fontSize:   '13px',
-          color:      tokens.colors.muted,
-          lineHeight: 1.6,
-        }}
-      >
-        {body}
-      </p>
+      {/* Text */}
+      <div style={{ flex: '1 1 240px', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: '28px', height: '28px',
+              borderRadius: '50%',
+              background: tokens.colors.purpleDim,
+              border: `1px solid ${tokens.colors.purpleRing}`,
+              fontSize: '12px', fontWeight: 900,
+              color: tokens.colors.purple,
+              flexShrink: 0,
+            }}
+          >
+            {number}
+          </span>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: tokens.colors.muted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            Step {number}
+          </span>
+        </div>
+        <p style={{ margin: 0, fontSize: 'clamp(18px, 3vw, 22px)', fontWeight: 800, color: tokens.colors.text, lineHeight: 1.25, letterSpacing: '-0.3px' }}>
+          {title}
+        </p>
+        <p style={{ margin: 0, fontSize: '14px', color: tokens.colors.muted, lineHeight: 1.7, maxWidth: '340px' }}>
+          {body}
+        </p>
+      </div>
     </div>
   )
 }
@@ -201,13 +448,6 @@ export default function LandingPage() {
           100% { box-shadow: 0 0 0 0   rgba(139,131,240,0); }
         }
         .gh-cta-pulse { animation: gh-pulse 2.2s ease-out infinite; }
-
-        /* Step card hover lift */
-        .gh-step { transition: transform 180ms ease, box-shadow 180ms ease; }
-        .gh-step:hover {
-          transform:  translateY(-3px);
-          box-shadow: 0 8px 32px rgba(0,0,0,0.35);
-        }
 
         a { color: inherit; }
       `}</style>
@@ -421,7 +661,7 @@ export default function LandingPage() {
         {/* ════════════════════════════════════════════════════════════════════
             3. HOW IT WORKS
         ════════════════════════════════════════════════════════════════════ */}
-        <section style={{ paddingBottom: '72px' }}>
+        <section style={{ paddingBottom: '80px' }}>
           <h2
             style={{
               textAlign:    'center',
@@ -430,36 +670,33 @@ export default function LandingPage() {
               color:        tokens.colors.muted,
               letterSpacing: '0.1em',
               textTransform: 'uppercase',
-              marginBottom: '28px',
+              marginBottom: '56px',
             }}
           >
             How it works
           </h2>
 
-          <div
-            style={{
-              display:   'flex',
-              gap:       '12px',
-              flexWrap:  'wrap',
-            }}
-          >
-            <Step
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '64px' }}>
+            <StepRow
               number={1}
-              icon="🧩"
               title="Install the free extension"
-              body="One click from the Chrome Web Store. No account needed to start saving items."
+              body="One click from the Chrome Web Store. Works on Chrome, Edge, Brave, and Arc. No account needed to start saving items right away."
+              mockup={<InstallMockup />}
             />
-            <Step
+
+            <StepRow
               number={2}
-              icon="♥"
               title="Click the heart on any product"
-              body="Browse Amazon, Etsy, Walmart — anywhere. A floating heart appears on every product page. Tap it to save with one click."
+              body="Browse Amazon, Etsy, Walmart — anywhere you shop. A floating pink heart appears on every product page. Tap it and the item is instantly saved to your list."
+              mockup={<ProductMockup />}
+              flip
             />
-            <Step
+
+            <StepRow
               number={3}
-              icon="🔗"
-              title="Share your personal link"
-              body="You get a permanent link like gifthint.io/list/yourname. Send it to friends and family before any occasion."
+              title="Share your link — friends buy, no duplicates"
+              body="You get a permanent page at gifthint.io/list/yourname. When a friend clicks Buy, the item is claimed so nobody buys the same thing twice."
+              mockup={<GiftListMockup />}
             />
           </div>
         </section>
