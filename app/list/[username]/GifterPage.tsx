@@ -149,6 +149,10 @@ export default function GifterPage({ user, items: initialItems }: GifterPageProp
 
         <GiftGrid
           items={visibleItems}
+          allItems={items}
+          name={name}
+          activeTag={activeTag}
+          onClearFilter={() => setActiveTag(null)}
           onClaim={handleClaim}
           wisherUserId={user.id}
           gifterPageUsername={user.public_username ?? ''}
@@ -185,10 +189,15 @@ function CtaBar({ appUrl }: { appUrl: string }) {
         color:        tokens.colors.purple,
       }}
     >
-      <span>✨</span>
-      <span>
+      <span aria-hidden="true">✨</span>
+      {/* Desktop / tablet: full copy */}
+      <span className="hidden sm:inline">
         Save anything. Share your list.{' '}
         <span className="underline underline-offset-2">Create yours free →</span>
+      </span>
+      {/* Mobile: short copy so the bar fits in one line */}
+      <span className="sm:hidden">
+        <span className="underline underline-offset-2">Create your free wishlist →</span>
       </span>
     </a>
   )
@@ -343,32 +352,120 @@ function TagPill({
 
 function GiftGrid({
   items,
+  allItems,
+  name,
+  activeTag,
+  onClearFilter,
   onClaim,
   wisherUserId,
   gifterPageUsername,
 }: {
   items:              WishItem[]
+  allItems:           WishItem[]
+  name:               string
+  activeTag:          string | null
+  onClearFilter:      () => void
   onClaim:            (id: string, name: string, anon: boolean) => Promise<void>
   wisherUserId:       string
   gifterPageUsername: string
 }) {
-  if (items.length === 0) {
+  // ── Empty state: list owner has no items at all ───────────────────────────
+  if (allItems.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 py-20 px-4 text-center">
-        <span className="text-5xl">🎁</span>
+        <span className="select-none" style={{ fontSize: 52, lineHeight: 1 }} aria-hidden="true">🎁</span>
         <p className="font-semibold text-base" style={{ color: tokens.colors.text }}>
-          No gifts here yet
+          {name} hasn&apos;t added anything yet
         </p>
         <p className="text-sm" style={{ color: tokens.colors.muted }}>
-          Try a different filter, or check back soon.
+          Check back soon — their wishlist is on its way!
         </p>
       </div>
     )
   }
 
+  // ── Empty state: filter returns zero results ───────────────────────────────
+  if (items.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-16 px-4 text-center" role="status" aria-live="polite">
+        <span className="select-none" style={{ fontSize: 44, lineHeight: 1 }} aria-hidden="true">🔍</span>
+        <p className="font-semibold text-sm" style={{ color: tokens.colors.text }}>
+          No items match this filter
+        </p>
+        {activeTag && (
+          <button
+            onClick={onClearFilter}
+            className="mt-1 px-4 py-2 rounded-full text-xs font-semibold transition-opacity hover:opacity-80"
+            style={{
+              background: tokens.colors.surface2,
+              border:     `1px solid ${tokens.colors.border}`,
+              color:      tokens.colors.muted,
+            }}
+          >
+            Clear filter
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  // ── Empty state: every item is claimed ────────────────────────────────────
+  const allClaimed = items.every((i) => i.is_claimed)
+  if (allClaimed) {
+    return (
+      <>
+        {/* Still render the cards — but show a banner above the grid */}
+        <div
+          className="mx-4 mb-6 px-5 py-4 rounded-2xl text-center"
+          style={{
+            background: tokens.colors.greenDim,
+            border:     `1px solid ${tokens.colors.greenRing}`,
+          }}
+        >
+          <p className="text-sm font-bold" style={{ color: tokens.colors.green }}>
+            🎉 Everything&apos;s been claimed — {name} is lucky!
+          </p>
+          <p className="text-xs mt-1" style={{ color: tokens.colors.green, opacity: 0.75 }}>
+            All gifts on this list have been spoken for.
+          </p>
+        </div>
+        <section className="px-4 pb-16">
+          <div
+            style={{
+              display:             'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+              gap:                 '12px',
+            }}
+          >
+            {items.map((item) => (
+              <GiftCard
+                key={item.id}
+                item={item}
+                onClaim={onClaim}
+                wisherUserId={wisherUserId}
+                gifterPageUsername={gifterPageUsername}
+              />
+            ))}
+          </div>
+        </section>
+      </>
+    )
+  }
+
+  // ── Normal grid ───────────────────────────────────────────────────────────
   return (
     <section className="px-4 pb-16">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/*
+        auto-fill grid: 160 px min-width = 2 cols on iPhone SE (375 px with padding).
+        Naturally scales to 3 cols on tablet, 4+ on wide desktop.
+      */}
+      <div
+        style={{
+          display:             'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+          gap:                 '12px',
+        }}
+      >
         {items.map((item) => (
           <GiftCard
             key={item.id}

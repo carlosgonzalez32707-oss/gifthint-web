@@ -1,0 +1,19 @@
+# GiftHint Manual QA Test Matrix
+
+| Test ID | Feature | Steps | Expected Result | Pass/Fail |
+|---------|---------|-------|-----------------|-----------|
+| T01 | Install extension on Chrome/Windows | 1. Download extension zip. 2. Open Chrome → chrome://extensions. 3. Enable Developer Mode. 4. Click "Load unpacked" and select extension folder. 5. Click extension icon in toolbar. | Popup opens and displays a "Sign in with Google" button. No errors in extension console. | |
+| T02 | Sign in with Google | 1. Open extension popup. 2. Click "Sign in with Google". 3. Complete Google OAuth flow. | User's display name and avatar appear in the popup header. Sign-in button replaced by signed-in state UI. | |
+| T03 | Navigate to Amazon product page | 1. While signed in, open any Amazon product detail page (URL contains /dp/ or /gp/product/). 2. Wait 2 seconds for page to settle. | Floating GiftHint heart button appears on the page, anchored to the right side or near the add-to-cart area. | |
+| T04 | Navigate to non-product Amazon page | 1. While signed in, navigate to amazon.com homepage, a search results page (?s=), or a category page. 2. Wait 2 seconds. | Floating button does NOT appear. No GiftHint UI injected on non-product pages. | |
+| T05 | Click floating button — save item | 1. On an Amazon product page with the floating button visible, click it. | Item saves to the user's list. A toast confirms "Item saved to your list". Button changes to "Saved" state. | |
+| T06 | Click floating button again on same product | 1. Remain on the same product page saved in T05 (or reload and return). 2. Click the floating button again. | Button shows "Already saved" or disabled state. No duplicate item created in the popup list. | |
+| T07 | Open popup — view saved item | 1. After T05, click the extension icon to open the popup. | Saved item appears with product image, title, and price. Item count badge is correct. | |
+| T08 | Delete item from popup | 1. Open the extension popup. 2. Hover/click the delete icon on a saved item. 3. Confirm if prompted. | Item removed from popup list immediately. Count badge decrements. Item no longer appears on gifter page after reload. | |
+| T09 | Open gifter page /list/[username] | 1. Copy the gifter page URL from the popup or share button. 2. Paste it into a browser where the user is NOT signed in. | Page loads without requiring login. Gift list is visible. No auth redirect. Page title references the user's name. | |
+| T10 | Click "I'll buy this" button | 1. On the gifter page, find an unclaimed item. 2. Click the "I'll buy this 🎁" button. | An inline claim form appears on the card, prompting for a name (optional). No full-page navigation. | |
+| T11 | Complete claim — item marked claimed | 1. In the form from T10, optionally enter a name. 2. Submit the form. | Item card updates to a "Claimed" state (green badge or overlay). "I'll buy this" button disappears. | |
+| T12 | Reload gifter page — claim persists | 1. After T11, reload the gifter page. | Previously claimed item still shows claimed state. Persists across page loads (DB-backed). | |
+| T13 | Viral CTA bar visible and link works | 1. Open the gifter page without being signed in. 2. Locate the CTA bar at the top. 3. Click "Create yours free →". | CTA bar is visible at the top of the page. Clicking navigates to the GiftHint home or sign-up page. Link is not broken. | |
+| T14 | FTC/affiliate disclosure footer visible | 1. Open the gifter page. 2. Scroll to the bottom. | Footer with affiliate disclosure text is visible and readable. Text contains the word "affiliate". Not hidden or overlapping other elements. | |
+| T15 | Gifter page mobile 375px layout | 1. Open the gifter page in Chrome DevTools with viewport set to 375px wide (iPhone SE). 2. Scroll the full page. | No horizontal scrollbar. All cards, CTA bar, and footer are visible. CTA bar text is not cropped. Images load or show emoji fallbacks. | |

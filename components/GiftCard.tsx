@@ -117,11 +117,25 @@ interface GiftCardProps {
 }
 
 export function GiftCard({ item, wisherUserId, gifterPageUsername }: GiftCardProps) {
-  // Track image load failures so we can swap in the emoji fallback
-  const [imgError, setImgError] = useState(false)
+  // Track image load state: 'loading' | 'loaded' | 'error'
+  const [imgState, setImgState] = useState<'loading' | 'loaded' | 'error'>(
+    item.image_url ? 'loading' : 'error',
+  )
 
   const isClaimed  = item.is_claimed
-  const buyUrl     = item.affiliate_url ?? item.source_url
+
+  // Prefer affiliate_url (server-side rewritten); fall back to source_url.
+  // Guard against malformed affiliate_url strings (Task 2 edge case).
+  const buyUrl = (() => {
+    try {
+      const candidate = item.affiliate_url ?? item.source_url
+      new URL(candidate) // throws if malformed
+      return candidate
+    } catch {
+      return item.source_url
+    }
+  })()
+
   // Exclude Amazon links from Skimlinks rewriting — they already carry our
   // Associates tag (applied server-side in lib/affiliate.ts). Skimlinks
   // respects the data-skimlinks-excluded attribute and skips those anchors.
@@ -137,7 +151,7 @@ export function GiftCard({ item, wisherUserId, gifterPageUsername }: GiftCardPro
       : `claimed by ${item.claimed_by}`
     : null
 
-  const showImage = !!item.image_url && !imgError
+  const showImage = imgState !== 'error'
 
   // Fire-and-forget click tracking — never awaited, never blocks navigation.
   // keepalive:true in trackBuyClick ensures the request survives tab navigation.
@@ -174,16 +188,23 @@ export function GiftCard({ item, wisherUserId, gifterPageUsername }: GiftCardPro
         }}
       >
         {showImage ? (
-          <Image
-            src={item.image_url!}
-            alt={item.title}
-            fill
-            sizes="(max-width: 480px) 50vw, (max-width: 768px) 33vw, 200px"
-            className="object-cover"
-            onError={() => setImgError(true)}
-            // Remove `unoptimized` after adding remotePatterns to next.config.js
-            unoptimized
-          />
+          <>
+            {/* Shimmer shown while the image is loading */}
+            {imgState === 'loading' && (
+              <div className="absolute inset-0 shimmer" aria-hidden="true" />
+            )}
+            <Image
+              src={item.image_url!}
+              alt={item.title}
+              fill
+              sizes="(max-width: 480px) 50vw, (max-width: 768px) 33vw, 200px"
+              className="object-cover"
+              onLoad={() => setImgState('loaded')}
+              onError={() => setImgState('error')}
+              // Remove `unoptimized` after adding remotePatterns to next.config.js
+              unoptimized
+            />
+          </>
         ) : (
           /* Emoji fallback — retailer-specific category icon */
           <div
@@ -199,9 +220,10 @@ export function GiftCard({ item, wisherUserId, gifterPageUsername }: GiftCardPro
       {/* ── Card body ────────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-2 p-3 flex-1">
 
-        {/* Title — 2-line max, 13 px, weight 500 */}
+        {/* Title — 2-line max, tooltip on hover for truncated text */}
         <p
-          className="line-clamp-2 leading-snug"
+          className="title-clamp leading-snug"
+          title={item.title}
           style={{
             fontSize:   '13px',
             fontWeight: 500,
