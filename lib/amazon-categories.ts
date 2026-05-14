@@ -368,6 +368,35 @@ const CATEGORY_TITLE_KEYWORDS: ReadonlyArray<readonly [keywords: readonly string
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Internal helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * True when `keyword` appears in `text` as a whole word (not as a substring
+ * of a longer word). Boundaries are non-alphanumeric characters, or the
+ * start/end of the string.
+ *
+ * Examples:
+ *   matchesAsWord("brace your arms",  "bra")  → false  ("bra" inside "brace")
+ *   matchesAsWord("bracelet and ring","bra")  → false  ("bra" inside "bracelet")
+ *   matchesAsWord("lace bra set",     "bra")  → true   ("bra" is its own word)
+ *   matchesAsWord("wireless controller","roller") → false ("roller" inside "controller")
+ */
+function matchesAsWord(text: string, keyword: string): boolean {
+  const idx = text.indexOf(keyword)
+  if (idx === -1) return false
+
+  const charBefore = idx > 0 ? text[idx - 1] : ''
+  const charAfter  =
+    idx + keyword.length < text.length ? text[idx + keyword.length] : ''
+
+  const okBefore = !charBefore || !/[a-z0-9]/.test(charBefore)
+  const okAfter  = !charAfter  || !/[a-z0-9]/.test(charAfter)
+
+  return okBefore && okAfter
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Public API
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -408,10 +437,7 @@ export function detectAmazonCategory(title: string, url: string): string {
 
   for (const [keywords, category] of CATEGORY_TITLE_KEYWORDS) {
     for (const kw of keywords) {
-      // Word-boundary-aware: check that the keyword appears as a distinct phrase
-      // (not as a substring of an unrelated word). Simple check: surrounded by
-      // non-alphanumeric characters or at string start/end.
-      if (lowerTitle.includes(kw)) {
+      if (matchesAsWord(lowerTitle, kw)) {
         return category
       }
     }
