@@ -47,7 +47,29 @@ export interface WishlistItem {
   /** Pre-rewrite URL preserved for reference */
   original_url:     string | null
   /** Affiliate-rewritten URL used in Buy buttons (falls back to source_url) */
-  affiliate_url:    string | null
+  affiliate_url:             string | null
+  /**
+   * Manual Skimlinks redirect URL, computed server-side for retailers that are
+   * neither Amazon nor in Skimlinks' auto-detected eligible list.
+   * Format: https://go.skimresources.com?id=[PUB_ID]XNW&url=[ENCODED_URL]
+   * Null for Amazon items and Skimlinks-eligible retailers (JS handles those).
+   * Optional because it is never stored in the DB — only set during the
+   * server-side rewriting pass in lib/affiliate.ts.
+   */
+  skimlinks_fallback_url?:  string | null
+  /**
+   * Inferred Amazon product category (set by detectAmazonCategory).
+   * Null for non-Amazon items or items whose category could not be determined.
+   * Mirrors the amazon_category column added in migration 003.
+   */
+  amazon_category?:        string | null
+  /**
+   * Estimated Associates commission for this item at time of save.
+   * Calculated as price × getCommissionRate(amazon_category).
+   * Null when price is unknown or item is not an Amazon product.
+   * Mirrors the estimated_commission column added in migration 003.
+   */
+  estimated_commission?:   number | null
   /** Human-readable retailer name, e.g. "amazon", "etsy", "target" */
   retailer:         string | null
 

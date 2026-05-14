@@ -17,7 +17,8 @@
 import { useState, useCallback }  from 'react'
 import Image                      from 'next/image'
 import { tokens }                 from '@/tokens'
-import { shouldSkipSkimlinks }    from '@/lib/affiliate'
+import { shouldSkipSkimlinks,
+         shouldUseFallbackRedirect } from '@/lib/affiliate'
 import { trackBuyClick,
          inferAffiliateNetwork }  from '@/lib/analytics'
 import type { WishlistItem }      from '@/types/wishlist'
@@ -124,22 +125,58 @@ export function GiftCard({ item, wisherUserId, gifterPageUsername }: GiftCardPro
 
   const isClaimed  = item.is_claimed
 
-  // Prefer affiliate_url (server-side rewritten); fall back to source_url.
-  // Guard against malformed affiliate_url strings (Task 2 edge case).
+  // ── Resolve the best buy URL for this item ───────────────────────────────
+  //
+  // Priority order:
+  //   1. skimlinks_fallback_url — for ineligible retailers: manual Skimlinks
+  //      redirect built server-side (go.skimresources.com). Used when neither
+  //      Associates nor Skimlinks' JS auto-detection covers this retailer.
+  //   2. affiliate_url — server-side rewritten (Associates tag for Amazon,
+  //      plain source_url for Skimlinks-eligible retailers).
+  //   3. source_url — raw saved URL, last resort.
+  //
+  // All candidates are validated with `new URL()` to guard against malformed
+  // strings that slipped past server validation.
   const buyUrl = (() => {
-    try {
-      const candidate = item.affiliate_url ?? item.source_url
-      new URL(candidate) // throws if malformed
-      return candidate
-    } catch {
-      return item.source_url
+    const candidates = [
+      item.skimlinks_fallback_url,
+      item.affiliate_url,
+      item.source_url,
+    ]
+    for (const candidate of candidates) {
+      if (!candidate) continue
+      try {
+        new URL(candidate)   // throws if malformed
+        return candidate
+      } catch {
+        // Try next candidate
+      }
     }
+    return item.source_url   // absolute last resort — may be malformed
   })()
+
+  // Warn in development when an item has no affiliate coverage so developers
+  // can catch gaps early. Never fires in production.
+  if (process.env.NODE_ENV === 'development') {
+    const hasCoverage =
+      shouldSkipSkimlinks(item.source_url) ||   // Amazon → Associates
+      !shouldUseFallbackRedirect(item.source_url) ||  // Skimlinks-eligible
+      !!item.skimlinks_fallback_url               // fallback redirect set
+    if (!hasCoverage) {
+      console.warn(
+        `[GiftHint] No affiliate coverage for item "${item.title}" ` +
+        `(${item.source_url}). ` +
+        'Add SKIMLINKS_PUBLISHER_ID to .env.local to enable fallback redirects.',
+      )
+    }
+  }
 
   // Exclude Amazon links from Skimlinks rewriting — they already carry our
   // Associates tag (applied server-side in lib/affiliate.ts). Skimlinks
   // respects the data-skimlinks-excluded attribute and skips those anchors.
-  const excludeFromSkimlinks = shouldSkipSkimlinks(buyUrl)
+  // Also exclude fallback-redirect URLs (they already route through Skimlinks).
+  const excludeFromSkimlinks =
+    shouldSkipSkimlinks(item.source_url) || !!item.skimlinks_fallback_url
   const retailerLabel = item.retailer
     ? item.retailer.charAt(0).toUpperCase() + item.retailer.slice(1)
     : 'Store'

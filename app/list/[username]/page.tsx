@@ -11,6 +11,7 @@ import { notFound }                          from 'next/navigation'
 import { createServerClient }                from '@/lib/supabase-server'
 import type { DbUser, DbWishlistItem }       from '@/lib/supabase-server'
 import { rewriteAmazonUrls }                 from '@/lib/affiliate'
+import type { WishlistItem }                  from '@/types/wishlist'
 import GifterPage                            from './GifterPage'
 
 // ── Shared prop types ─────────────────────────────────────────────────────────
@@ -186,8 +187,9 @@ export default async function Page({ params }: RouteProps) {
   // See lib/affiliate.ts for the compliance rationale.
   const associatesTag = process.env.AMAZON_ASSOCIATES_TAG ?? ''
   const rewrittenItems = rewriteAmazonUrls(
-    (items ?? []) as WishItem[],
+    (items ?? []) as unknown as WishlistItem[],
     associatesTag,
+    process.env.SKIMLINKS_PUBLISHER_ID,
   )
 
   return (

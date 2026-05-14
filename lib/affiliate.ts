@@ -24,7 +24,9 @@
  *              mechanism (the gifter page, not the extension).
  */
 
-import type { WishlistItem } from '@/types/wishlist'
+import type { WishlistItem }                           from '@/types/wishlist'
+import { SKIMLINKS_ELIGIBLE_DOMAINS }                  from '@/lib/skimlinks-eligible-retailers'
+import { detectAmazonCategory, estimateCommission }    from '@/lib/amazon-categories'
 
 // ── shouldSkipSkimlinks ───────────────────────────────────────────────────────
 
@@ -146,29 +148,99 @@ export function rewriteAmazonUrl(url: string, associatesTag: string): string {
  * Applies affiliate rewriting across an entire array of wishlist items.
  *
  * For each item:
- *   - Amazon URLs  → affiliate_url gets the rewritten Associates URL
- *   - Other URLs   → affiliate_url = source_url
- *                    (Skimlinks handles non-Amazon retailers via its own
- *                     compliant client-side JS on the gifter page)
+ *   - Amazon URLs              → affiliate_url = Associates-tagged URL
+ *   - Skimlinks-eligible URLs  → affiliate_url = source_url
+ *                                 (Skimlinks JS rewrites these client-side)
+ *   - Skimlinks-ineligible URLs → affiliate_url = source_url
+ *                                  skimlinks_fallback_url = manual redirect
+ *                                  (forces traffic through Skimlinks even for
+ *                                   unknown retailers — captures any commission
+ *                                   Skimlinks may have that we don't know about)
  *
  * original_url is NEVER modified — it always holds the user's raw saved URL.
  *
  * @param items         Raw items from Supabase.
  * @param associatesTag Amazon Associates tag from environment variable.
+ * @param skimPublisherId Skimlinks publisher ID (from SKIMLINKS_PUBLISHER_ID env).
+ *                        If omitted, skimlinks_fallback_url is not set.
  */
 export function rewriteAmazonUrls(
-  items:         WishlistItem[],
-  associatesTag: string,
+  items:            WishlistItem[],
+  associatesTag:    string,
+  skimPublisherId?: string,
 ): WishlistItem[] {
   return items.map((item) => {
-    const rewritten = isAmazonUrl(item.source_url)
-      ? rewriteAmazonUrl(item.source_url, associatesTag)
-      : item.source_url
+    const url = item.source_url
+
+    if (isAmazonUrl(url)) {
+      // Detect category and calculate commission while we already have the item
+      const category            = detectAmazonCategory(item.title, url)
+      const estimated_commission = estimateCommission(item.price, category)
+
+      return {
+        ...item,
+        affiliate_url:          rewriteAmazonUrl(url, associatesTag),
+        skimlinks_fallback_url: null,   // Amazon is excluded from Skimlinks
+        amazon_category:        category,
+        estimated_commission,
+      }
+    }
+
+    // Non-Amazon: Skimlinks JS handles eligible retailers automatically.
+    // For ineligible retailers, set a manual fallback redirect so we still
+    // route through Skimlinks and capture any coverage they may have.
+    const fallback =
+      skimPublisherId && shouldUseFallbackRedirect(url)
+        ? addSkimlinksParam(url, skimPublisherId)
+        : null
 
     return {
       ...item,
-      affiliate_url: rewritten,
-      // original_url intentionally untouched
+      affiliate_url:          url,
+      skimlinks_fallback_url: fallback,
+      amazon_category:        null,
+      estimated_commission:   null,
     }
   })
+}
+
+// ── addSkimlinksParam ─────────────────────────────────────────────────────────
+
+/**
+ * Builds a Skimlinks redirect URL for any destination URL.
+ *
+ * Format: https://go.skimresources.com?id=[PUBLISHER_ID]XNW&url=[ENCODED_URL]
+ *
+ * Use this as a fallback for retailers not covered by Amazon Associates and
+ * not auto-detected by Skimlinks' client-side JS. Routing through this URL
+ * lets Skimlinks attempt affiliate attribution regardless of domain recognition.
+ *
+ * @param url          The destination product URL (will be URL-encoded).
+ * @param publisherId  Your Skimlinks publisher ID (numeric string, e.g. "123456").
+ */
+export function addSkimlinksParam(url: string, publisherId: string): string {
+  const encodedUrl = encodeURIComponent(url)
+  return `https://go.skimresources.com?id=${publisherId}XNW&url=${encodedUrl}`
+}
+
+// ── shouldUseFallbackRedirect ─────────────────────────────────────────────────
+
+/**
+ * Returns true when a URL is not covered by Amazon Associates and is also
+ * not in Skimlinks' known-eligible retailer list.
+ *
+ * When true, GiftCard should use skimlinks_fallback_url (the manual Skimlinks
+ * redirect built by addSkimlinksParam) rather than the bare source_url.
+ *
+ * @param url  The original product URL.
+ */
+export function shouldUseFallbackRedirect(url: string): boolean {
+  if (isAmazonUrl(url)) return false   // Amazon is handled by Associates
+
+  try {
+    const domain = new URL(url).hostname.replace(/^www\./, '').toLowerCase()
+    return !SKIMLINKS_ELIGIBLE_DOMAINS.has(domain)
+  } catch {
+    return false   // Malformed URL — don't try to redirect
+  }
 }
