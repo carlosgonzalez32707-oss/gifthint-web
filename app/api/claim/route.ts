@@ -18,10 +18,52 @@
  *   can't both succeed — Supabase / Postgres guarantees only one row is updated.
  *   If the matched row count is zero we do a follow-up SELECT to distinguish
  *   "item doesn't exist" (404) from "already claimed by someone else" (409).
+ *
+ * Realtime broadcast:
+ *   After a successful claim the route broadcasts to the Supabase Realtime
+ *   channel `gifthint:claims:<user_id>` so all connected gifter-page clients
+ *   update instantly — before the Postgres CDC event propagates (~200 ms–2 s).
+ *   The broadcast is fire-and-forget: failure does NOT cause the claim to fail.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient }        from '@/lib/supabase-server'
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Broadcasts an `item_claimed` event to all clients currently subscribed to
+ * the wisher's claims channel.
+ *
+ * Uses `ack: false` so the server doesn't wait for subscriber acknowledgement —
+ * this keeps the claim response fast even under load.
+ *
+ * Called after a successful DB update; errors here are non-fatal.
+ */
+async function broadcastClaim(
+  supabase: ReturnType<typeof createServerClient>,
+  wisherUserId: string,
+  itemId:       string,
+): Promise<void> {
+  // Channel name must match the one subscribed to in useRealtimeClaims.ts
+  const channel = supabase.channel(`gifthint:claims:${wisherUserId}`, {
+    config: { broadcast: { ack: false } },
+  })
+
+  try {
+    await channel.send({
+      type:    'broadcast',
+      event:   'item_claimed',
+      payload: { itemId },
+    })
+  } catch (err) {
+    // Non-fatal — the Postgres CDC path will still deliver the update
+    console.warn('[claim] broadcast failed (non-fatal):', err)
+  } finally {
+    // Always clean up the ephemeral channel so we don't leak WS connections
+    await supabase.removeChannel(channel)
+  }
+}
 
 export async function POST(req: NextRequest) {
   // ── Parse body ──────────────────────────────────────────────────────────────
@@ -65,6 +107,11 @@ export async function POST(req: NextRequest) {
 
   // Update matched a row — success
   if (updatedItem) {
+    // Broadcast to all connected gifter-page clients so their UI updates
+    // immediately (~<200 ms) rather than waiting for Postgres CDC (~200 ms–2 s).
+    // Fire-and-forget — we don't await or let this block the HTTP response.
+    void broadcastClaim(supabase, updatedItem.user_id, updatedItem.id)
+
     return NextResponse.json({ success: true, item: updatedItem })
   }
 

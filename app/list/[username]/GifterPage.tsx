@@ -21,6 +21,7 @@ import { createClient }                   from '@supabase/supabase-js'
 import { tokens }                         from '@/tokens'
 import { trackBuyClick,
          inferAffiliateNetwork }          from '@/lib/analytics'
+import { useRealtimeClaims }              from '@/hooks/useRealtimeClaims'
 import type { WishUser, WishItem }        from './page'
 
 // ── Browser Supabase client (anon key — safe to expose) ───────────────────────
@@ -62,18 +63,46 @@ export default function GifterPage({ user, items: initialItems }: GifterPageProp
   const appUrl  = process.env.NEXT_PUBLIC_APP_URL ?? 'https://gifthint.io'
   const listUrl = `${appUrl}/list/${user.public_username}`
 
+  // ── Realtime claimed state ─────────────────────────────────────────────────
+  // Seed with IDs already claimed in the server render so the hook never
+  // triggers false flash notifications for pre-existing claimed items.
+  const initialClaimed = useMemo<ReadonlySet<string>>(
+    () => new Set(initialItems.filter((i) => i.is_claimed).map((i) => i.id)),
+    // Only recompute when the initial server data changes (i.e. full page reload)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+
+  const { claimedItemIds, newlyClaimedId } = useRealtimeClaims(
+    user.id,
+    user.public_username ?? '',
+    initialClaimed,
+  )
+
+  // Merge server-fetched claimed state with live realtime updates.
+  // An item is claimed if the DB said so at render time OR a live event arrived.
+  const effectiveItems = useMemo<WishItem[]>(
+    () =>
+      items.map((item) =>
+        !item.is_claimed && claimedItemIds.has(item.id)
+          ? { ...item, is_claimed: true, claimed_by: null, claimed_anonymous: true, claimed_at: new Date().toISOString() }
+          : item,
+      ),
+    [items, claimedItemIds],
+  )
+
   // Collect every unique DNA tag across all items for the filter bar
   const allTags = useMemo<string[]>(() => {
     const seen = new Set<string>()
-    items.forEach((item) => item.dna_tags.forEach((t) => seen.add(t)))
+    effectiveItems.forEach((item) => item.dna_tags.forEach((t) => seen.add(t)))
     return Array.from(seen)
-  }, [items])
+  }, [effectiveItems])
 
   // Apply tag filter client-side — no re-fetch needed
   const visibleItems = useMemo<WishItem[]>(() => {
-    if (!activeTag) return items
-    return items.filter((item) => item.dna_tags.includes(activeTag))
-  }, [items, activeTag])
+    if (!activeTag) return effectiveItems
+    return effectiveItems.filter((item) => item.dna_tags.includes(activeTag))
+  }, [effectiveItems, activeTag])
 
   // Called by GiftCard after user confirms claim
   async function handleClaim(
@@ -149,13 +178,14 @@ export default function GifterPage({ user, items: initialItems }: GifterPageProp
 
         <GiftGrid
           items={visibleItems}
-          allItems={items}
+          allItems={effectiveItems}
           name={name}
           activeTag={activeTag}
           onClearFilter={() => setActiveTag(null)}
           onClaim={handleClaim}
           wisherUserId={user.id}
           gifterPageUsername={user.public_username ?? ''}
+          newlyClaimedId={newlyClaimedId}
         />
 
         <ReminderSignup
@@ -359,6 +389,7 @@ function GiftGrid({
   onClaim,
   wisherUserId,
   gifterPageUsername,
+  newlyClaimedId,
 }: {
   items:              WishItem[]
   allItems:           WishItem[]
@@ -368,6 +399,8 @@ function GiftGrid({
   onClaim:            (id: string, name: string, anon: boolean) => Promise<void>
   wisherUserId:       string
   gifterPageUsername: string
+  /** ID of item claimed in the last 3 s — triggers flash notification on that card */
+  newlyClaimedId:     string | null
 }) {
   // ── Empty state: list owner has no items at all ───────────────────────────
   if (allItems.length === 0) {
@@ -444,6 +477,7 @@ function GiftGrid({
                 onClaim={onClaim}
                 wisherUserId={wisherUserId}
                 gifterPageUsername={gifterPageUsername}
+                justClaimed={item.id === newlyClaimedId}
               />
             ))}
           </div>
@@ -473,6 +507,7 @@ function GiftGrid({
             onClaim={onClaim}
             wisherUserId={wisherUserId}
             gifterPageUsername={gifterPageUsername}
+            justClaimed={item.id === newlyClaimedId}
           />
         ))}
       </div>
@@ -489,11 +524,14 @@ function GiftCard({
   onClaim,
   wisherUserId,
   gifterPageUsername,
+  justClaimed = false,
 }: {
   item:               WishItem
   onClaim:            (id: string, name: string, anon: boolean) => Promise<void>
   wisherUserId:       string
   gifterPageUsername: string
+  /** True for ~3 s when this item was claimed by someone else in real-time */
+  justClaimed?:       boolean
 }) {
   const [claiming,   setClaiming]   = useState(false)
   const [claimName,  setClaimName]  = useState('')
@@ -535,9 +573,18 @@ function GiftCard({
       }}
     >
       {/* ── Product image ──────────────────────────────────────────────── */}
+      {/*
+        Transition: 400 ms on filter + opacity so a real-time claimed event
+        fades the card to greyscale smoothly rather than snapping instantly.
+      */}
       <div
         className="relative w-full aspect-square flex items-center justify-center text-5xl select-none"
-        style={{ background: tokens.colors.surface2 }}
+        style={{
+          background:  tokens.colors.surface2,
+          transition:  'filter 400ms ease, opacity 400ms ease',
+          filter:      item.is_claimed ? 'grayscale(1)' : 'grayscale(0)',
+          opacity:     item.is_claimed ? 0.55 : 1,
+        }}
       >
         {item.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -550,7 +597,7 @@ function GiftCard({
           '🎁'
         )}
 
-        {/* Claimed overlay */}
+        {/* Claimed overlay — appears when is_claimed is true */}
         {item.is_claimed && (
           <div
             className="absolute inset-0 flex items-center justify-center"
@@ -565,6 +612,40 @@ function GiftCard({
             >
               ✓ Claimed
             </span>
+          </div>
+        )}
+
+        {/*
+          Flash notification — visible for 3 s when a Realtime event arrives
+          for this specific card. Positioned at bottom of the image so it
+          doesn't block the "✓ Claimed" overlay above.
+        */}
+        {justClaimed && (
+          <div
+            aria-live="polite"
+            aria-atomic="true"
+            style={{
+              // Absolutely positioned inside the image container
+              position:     'absolute',
+              bottom:       '8px',
+              left:         '50%',
+              transform:    'translateX(-50%)',
+              // Green pill matching the design system
+              background:   tokens.colors.green,
+              color:        '#0a1a12',
+              fontSize:     '11px',
+              fontWeight:   700,
+              padding:      '4px 12px',
+              borderRadius: '999px',
+              whiteSpace:   'nowrap',
+              // Animate in from below
+              animation:    'gifthint-flash-in 200ms ease forwards',
+              // Keep above the claimed overlay if both are visible
+              zIndex:       10,
+              pointerEvents: 'none',
+            }}
+          >
+            Just claimed by someone 🎉
           </div>
         )}
 

@@ -42,6 +42,21 @@ input, textarea, select {
   background: rgba(255, 255, 255, 0.2);
 }
 
+/* ── Realtime claim flash notification ─────────────────────────────────────── */
+/* Animates the "Just claimed by someone 🎉" pill in from below.               */
+/* Used by GiftCard inside GifterPage when a live Realtime event arrives.      */
+
+@keyframes gifthint-flash-in {
+  from {
+    opacity:   0;
+    transform: translateX(-50%) translateY(6px);
+  }
+  to {
+    opacity:   1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
 /* ── Skeleton shimmer ──────────────────────────────────────────────────────── */
 /* Used by GiftGridSkeleton and the extension popup skeleton.                  */
 /* The gradient moves left-to-right over 1.5 s, creating a soft sweeping      */
