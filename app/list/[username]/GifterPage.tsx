@@ -23,6 +23,7 @@ import { trackBuyClick,
          inferAffiliateNetwork }          from '@/lib/analytics'
 import { useRealtimeClaims }              from '@/hooks/useRealtimeClaims'
 import { GifterCoordinationPanel }        from '@/components/GifterCoordinationPanel'
+import { ReminderSignup }                 from '@/components/ReminderSignup'
 import type { WishUser, WishItem }        from './page'
 
 // ── Browser Supabase client (anon key — safe to expose) ───────────────────────
@@ -57,8 +58,6 @@ export default function GifterPage({ user, items: initialItems }: GifterPageProp
   // Optimistic claim updates live here — items prop is server-rendered initial state
   const [items, setItems] = useState<WishItem[]>(initialItems)
   const [activeTag, setActiveTag] = useState<string | null>(null)
-  const [reminderEmail, setReminderEmail] = useState('')
-  const [reminderSent,  setReminderSent]  = useState(false)
 
   const name    = user.display_name?.split(' ')[0] ?? user.public_username ?? 'Someone'
   const appUrl  = process.env.NEXT_PUBLIC_APP_URL ?? 'https://gifthint.io'
@@ -175,14 +174,6 @@ export default function GifterPage({ user, items: initialItems }: GifterPageProp
     }
   }
 
-  async function handleReminderSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!reminderEmail) return
-    // TODO: store in `reminder_subscribers` table or forward to email service
-    // await supabaseBrowser.from('reminder_subscribers').insert({ email: reminderEmail, list_owner_id: user.id })
-    setReminderSent(true)
-  }
-
   return (
     <div
       style={{
@@ -224,11 +215,8 @@ export default function GifterPage({ user, items: initialItems }: GifterPageProp
         />
 
         <ReminderSignup
-          name={name}
-          email={reminderEmail}
-          onEmailChange={setReminderEmail}
-          sent={reminderSent}
-          onSubmit={handleReminderSubmit}
+          wisherUsername={user.public_username ?? ''}
+          wisherName={name}
         />
 
         {/* ── Gifter coordination panel ──────────────────────────────── */}
@@ -938,88 +926,6 @@ function GiftCard({
         )}
       </div>
     </article>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ReminderSignup
-// ─────────────────────────────────────────────────────────────────────────────
-
-function ReminderSignup({
-  name,
-  email,
-  onEmailChange,
-  sent,
-  onSubmit,
-}: {
-  name:          string
-  email:         string
-  onEmailChange: (v: string) => void
-  sent:          boolean
-  onSubmit:      (e: React.FormEvent) => void
-}) {
-  return (
-    <section
-      className="mx-4 mb-16 rounded-2xl p-8 text-center"
-      style={{
-        background: tokens.colors.surface,
-        border:     `1px solid ${tokens.colors.border}`,
-      }}
-    >
-      <div className="text-3xl mb-3">🔔</div>
-
-      <h2
-        className="text-base font-bold mb-1.5"
-        style={{ color: tokens.colors.text }}
-      >
-        Want to know when {name} adds more gifts?
-      </h2>
-      <p
-        className="text-sm mb-6 max-w-xs mx-auto"
-        style={{ color: tokens.colors.muted }}
-      >
-        One email, no spam. We&apos;ll ping you when new items are added.
-      </p>
-
-      {sent ? (
-        <p
-          className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-full"
-          style={{
-            background: tokens.colors.greenDim,
-            border:     `1px solid ${tokens.colors.greenRing}`,
-            color:      tokens.colors.green,
-          }}
-        >
-          ✓ You&apos;re on the list!
-        </p>
-      ) : (
-        <form
-          onSubmit={onSubmit}
-          className="flex gap-2 max-w-sm mx-auto"
-        >
-          <input
-            type="email"
-            placeholder="your@email.com"
-            value={email}
-            onChange={(e) => onEmailChange(e.target.value)}
-            required
-            className="flex-1 px-4 py-2.5 rounded-xl text-sm outline-none"
-            style={{
-              background: tokens.colors.surface2,
-              border:     `1px solid rgba(255,255,255,0.10)`,
-              color:      tokens.colors.text,
-            }}
-          />
-          <button
-            type="submit"
-            className="px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-opacity hover:opacity-85"
-            style={{ background: tokens.colors.purple, color: '#fff' }}
-          >
-            Notify me
-          </button>
-        </form>
-      )}
-    </section>
   )
 }
 
