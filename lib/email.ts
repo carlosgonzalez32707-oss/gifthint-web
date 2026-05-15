@@ -54,6 +54,20 @@ export interface SendReminderEmailParams {
 // at module-load time if RESEND_API_KEY is missing in dev.
 
 async function getResend() {
+  // ── Test mode — set RESEND_TEST_MODE=true to skip real API calls ───────────
+  // Useful for Jest tests and local development without a Resend account.
+  // The returned object satisfies the interface used by sendReminderEmail.
+  if (process.env.RESEND_TEST_MODE === 'true') {
+    return {
+      emails: {
+        send: async (_params: unknown) => ({
+          data:  { id: 'test-mode-noop' },
+          error: null,
+        }),
+      },
+    }
+  }
+
   const { Resend } = await import('resend')
   const key = process.env.RESEND_API_KEY
   if (!key) {
