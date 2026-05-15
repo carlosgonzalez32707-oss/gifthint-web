@@ -22,6 +22,7 @@ import { tokens }                         from '@/tokens'
 import { trackBuyClick,
          inferAffiliateNetwork }          from '@/lib/analytics'
 import { useRealtimeClaims }              from '@/hooks/useRealtimeClaims'
+import { GifterCoordinationPanel }        from '@/components/GifterCoordinationPanel'
 import type { WishUser, WishItem }        from './page'
 
 // ── Browser Supabase client (anon key — safe to expose) ───────────────────────
@@ -141,6 +142,39 @@ export default function GifterPage({ user, items: initialItems }: GifterPageProp
     )
   }
 
+  // Called by GiftCard when gifter's name matches the stored claimed_by
+  async function handleUnclaim(itemId: string, claimedBy: string): Promise<'ok' | 'mismatch' | 'error'> {
+    try {
+      const res = await fetch(`/api/claim/${itemId}`, {
+        method:  'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ claimedBy }),
+      })
+
+      if (res.status === 403) return 'mismatch'
+      if (!res.ok)            return 'error'
+
+      // Optimistic reset — bring the card back to unclaimed state
+      setItems((prev) =>
+        prev.map((item) =>
+          item.id === itemId
+            ? {
+                ...item,
+                is_claimed:        false,
+                claimed_by:        null,
+                claimed_anonymous: false,
+                claimed_at:        null,
+              }
+            : item,
+        ),
+      )
+
+      return 'ok'
+    } catch {
+      return 'error'
+    }
+  }
+
   async function handleReminderSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!reminderEmail) return
@@ -183,6 +217,7 @@ export default function GifterPage({ user, items: initialItems }: GifterPageProp
           activeTag={activeTag}
           onClearFilter={() => setActiveTag(null)}
           onClaim={handleClaim}
+          onUnclaim={handleUnclaim}
           wisherUserId={user.id}
           gifterPageUsername={user.public_username ?? ''}
           newlyClaimedId={newlyClaimedId}
@@ -194,6 +229,14 @@ export default function GifterPage({ user, items: initialItems }: GifterPageProp
           onEmailChange={setReminderEmail}
           sent={reminderSent}
           onSubmit={handleReminderSubmit}
+        />
+
+        {/* ── Gifter coordination panel ──────────────────────────────── */}
+        {/* Shows claimed items so multiple gifters can coordinate.       */}
+        {/* claimedCount is derived from effectiveItems (merges Realtime) */}
+        <GifterCoordinationPanel
+          username={user.public_username ?? ''}
+          claimedCount={effectiveItems.filter((i) => i.is_claimed).length}
         />
       </main>
 
@@ -387,6 +430,7 @@ function GiftGrid({
   activeTag,
   onClearFilter,
   onClaim,
+  onUnclaim,
   wisherUserId,
   gifterPageUsername,
   newlyClaimedId,
@@ -397,6 +441,7 @@ function GiftGrid({
   activeTag:          string | null
   onClearFilter:      () => void
   onClaim:            (id: string, name: string, anon: boolean) => Promise<void>
+  onUnclaim:          (itemId: string, claimedBy: string) => Promise<'ok' | 'mismatch' | 'error'>
   wisherUserId:       string
   gifterPageUsername: string
   /** ID of item claimed in the last 3 s — triggers flash notification on that card */
@@ -475,6 +520,7 @@ function GiftGrid({
                 key={item.id}
                 item={item}
                 onClaim={onClaim}
+                onUnclaim={onUnclaim}
                 wisherUserId={wisherUserId}
                 gifterPageUsername={gifterPageUsername}
                 justClaimed={item.id === newlyClaimedId}
@@ -505,6 +551,7 @@ function GiftGrid({
             key={item.id}
             item={item}
             onClaim={onClaim}
+            onUnclaim={onUnclaim}
             wisherUserId={wisherUserId}
             gifterPageUsername={gifterPageUsername}
             justClaimed={item.id === newlyClaimedId}
@@ -522,21 +569,25 @@ function GiftGrid({
 function GiftCard({
   item,
   onClaim,
+  onUnclaim,
   wisherUserId,
   gifterPageUsername,
   justClaimed = false,
 }: {
   item:               WishItem
   onClaim:            (id: string, name: string, anon: boolean) => Promise<void>
+  onUnclaim:          (itemId: string, claimedBy: string) => Promise<'ok' | 'mismatch' | 'error'>
   wisherUserId:       string
   gifterPageUsername: string
   /** True for ~3 s when this item was claimed by someone else in real-time */
   justClaimed?:       boolean
 }) {
-  const [claiming,   setClaiming]   = useState(false)
-  const [claimName,  setClaimName]  = useState('')
-  const [anonymous,  setAnonymous]  = useState(false)
-  const [submitting, setSubmitting] = useState(false)
+  const [claiming,     setClaiming]     = useState(false)
+  const [claimName,    setClaimName]    = useState('')
+  const [anonymous,    setAnonymous]    = useState(false)
+  const [submitting,   setSubmitting]   = useState(false)
+  const [unclaiming,   setUnclaiming]   = useState(false)
+  const [unclaimError, setUnclaimError] = useState<string | null>(null)
 
   // Fire-and-forget click tracking when gifter taps "I'll buy this"
   const handleBuyClick = useCallback(() => {
@@ -557,6 +608,34 @@ function GiftCard({
     setSubmitting(false)
     setClaiming(false)
   }
+
+  // Gifter can unclaim if they enter the same name they used when claiming.
+  // The check is done server-side (403 on mismatch); client shows inline error.
+  async function submitUnclaim() {
+    if (!claimName.trim()) return
+    setUnclaiming(true)
+    setUnclaimError(null)
+    const result = await onUnclaim(item.id, claimName.trim())
+    setUnclaiming(false)
+    if (result === 'mismatch') {
+      setUnclaimError("Name doesn't match — only the person who claimed this can unclaim it.")
+    } else if (result === 'error') {
+      setUnclaimError('Something went wrong. Please try again.')
+    } else {
+      // 'ok' — item is unclaimed; reset form
+      setClaiming(false)
+      setClaimName('')
+    }
+  }
+
+  // True when the typed name matches the stored claimed_by (case-insensitive).
+  // Used to decide whether to offer the unclaim button in the claim form.
+  const nameMatchesClaim =
+    item.is_claimed &&
+    !item.claimed_anonymous &&
+    !!item.claimed_by &&
+    !!claimName.trim() &&
+    claimName.trim().toLowerCase() === item.claimed_by.trim().toLowerCase()
 
   // Claimed attribution line: "Alex is getting this" / "Someone is getting this"
   const claimedLabel = item.claimed_anonymous || !item.claimed_by
@@ -778,7 +857,7 @@ function GiftCard({
             <div className="flex gap-2 mt-1">
               <button
                 onClick={submitClaim}
-                disabled={submitting}
+                disabled={submitting || unclaiming}
                 className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-opacity disabled:opacity-50"
                 style={{ background: tokens.colors.purple, color: '#fff' }}
               >
@@ -796,6 +875,55 @@ function GiftCard({
                 Cancel
               </button>
             </div>
+
+            {/* ── Unclaim option — shown only when the name matches ──── */}
+            {nameMatchesClaim && (
+              <div
+                style={{
+                  marginTop:  '8px',
+                  paddingTop: '8px',
+                  borderTop:  `1px solid ${tokens.colors.border}`,
+                }}
+              >
+                <p
+                  style={{
+                    fontSize:   '11px',
+                    color:      tokens.colors.muted,
+                    margin:     '0 0 6px',
+                    textAlign:  'center',
+                  }}
+                >
+                  You claimed this item. Changed your mind?
+                </p>
+                <button
+                  onClick={submitUnclaim}
+                  disabled={unclaiming || submitting}
+                  className="w-full py-2 rounded-xl text-xs font-semibold transition-opacity disabled:opacity-50"
+                  style={{
+                    background: tokens.colors.surface,
+                    border:     `1px solid ${tokens.colors.border}`,
+                    color:      tokens.colors.muted,
+                  }}
+                >
+                  {unclaiming ? 'Unclaiming…' : '↩ Unclaim this item'}
+                </button>
+              </div>
+            )}
+
+            {/* ── Unclaim error message ─────────────────────────────── */}
+            {unclaimError && (
+              <p
+                role="alert"
+                style={{
+                  marginTop: '6px',
+                  fontSize:  '11px',
+                  color:     tokens.colors.amber,
+                  textAlign: 'center',
+                }}
+              >
+                {unclaimError}
+              </p>
+            )}
           </div>
 
         ) : (
