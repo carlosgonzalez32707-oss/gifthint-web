@@ -21,7 +21,7 @@
   ],
 
   "oauth2": {
-    "client_id": "YOUR_OAUTH_CLIENT_ID.apps.googleusercontent.com",
+    "client_id": "987313469607-sngektdhq0k17ghcl7ggtsi7k2q19uel.apps.googleusercontent.com",
     "scopes": ["email", "profile"]
   },
 
