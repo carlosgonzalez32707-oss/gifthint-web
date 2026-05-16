@@ -7,6 +7,11 @@
  *   claimed  — greyscale + opacity-50, buy button → "✓ Already claimed" pill
  *   no-image — retailer-category emoji centred on surface2 background
  *
+ * DNA tag display:
+ *   Each tag pill shows a plain-English tooltip on hover via DNA_TAG_TOOLTIPS.
+ *   Claimed items with tags show an AlternativeGiftPanel below the action area.
+ *   Unclaimed items with tags show a collapsible "💡 Gifting tips" section.
+ *
  * NOTE: next/image requires remotePatterns in next.config.js for external
  * image domains. Add the CDN hostnames for each retailer you support, e.g.:
  *   images: { remotePatterns: [{ protocol: 'https', hostname: '**.amazon.com' }, ...] }
@@ -14,14 +19,17 @@
 
 'use client'
 
-import { useState, useCallback }  from 'react'
-import Image                      from 'next/image'
-import { tokens }                 from '@/tokens'
+import { useState, useCallback }        from 'react'
+import Image                            from 'next/image'
+import { tokens }                       from '@/tokens'
 import { shouldSkipSkimlinks,
-         shouldUseFallbackRedirect } from '@/lib/affiliate'
+         shouldUseFallbackRedirect }    from '@/lib/affiliate'
 import { trackBuyClick,
-         inferAffiliateNetwork }  from '@/lib/analytics'
-import type { WishlistItem }      from '@/types/wishlist'
+         inferAffiliateNetwork }        from '@/lib/analytics'
+import { DNA_TAG_TOOLTIPS }             from '@/lib/dna-tags'
+import { generateAlternativeGuidance }  from '@/lib/alternative-guidance'
+import { AlternativeGiftPanel }         from '@/components/AlternativeGiftPanel'
+import type { WishlistItem }            from '@/types/wishlist'
 
 // ── Retailer → fallback emoji ─────────────────────────────────────────────────
 // Matches on a substring of the normalised retailer string so "amazon.com"
@@ -75,6 +83,172 @@ function cn(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(' ')
 }
 
+// ── DNA tag pill with hover tooltip ──────────────────────────────────────────
+
+/**
+ * Renders a single DNA tag pill with a plain-English tooltip on hover.
+ * The tooltip is an absolutely-positioned div anchored below the pill so it
+ * stays within the card and avoids overflow clipping at the viewport edge.
+ */
+function DnaTagPill({ tag }: { tag: string }) {
+  const [hovered, setHovered] = useState(false)
+  const tooltip = DNA_TAG_TOOLTIPS[tag]
+
+  return (
+    <span
+      style={{ position: 'relative', display: 'inline-block' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
+    >
+      <span
+        className="rounded-full"
+        style={{
+          display:     'inline-block',
+          fontSize:    '10px',
+          fontWeight:  600,
+          padding:     '2px 7px',
+          background:  tokens.colors.purpleDim,
+          border:      `1px solid ${tokens.colors.purpleRing}`,
+          color:       tokens.colors.purple,
+          lineHeight:  1.6,
+          whiteSpace:  'nowrap',
+          cursor:      tooltip ? 'default' : undefined,
+          userSelect:  'none',
+        }}
+      >
+        {tag}
+      </span>
+
+      {/* Tooltip — only rendered when hovered and a tooltip string exists */}
+      {hovered && tooltip && (
+        <span
+          role="tooltip"
+          style={{
+            position:     'absolute',
+            top:          'calc(100% + 5px)',
+            left:         '50%',
+            transform:    'translateX(-50%)',
+            zIndex:       50,
+            minWidth:     '150px',
+            maxWidth:     '220px',
+            padding:      '6px 9px',
+            borderRadius: '6px',
+            background:   tokens.colors.text,
+            color:        tokens.colors.surface,
+            fontSize:     '10.5px',
+            fontWeight:   400,
+            lineHeight:   1.45,
+            textAlign:    'center',
+            whiteSpace:   'normal',
+            pointerEvents:'none',
+            boxShadow:    '0 4px 12px rgba(0,0,0,0.25)',
+          }}
+        >
+          {tooltip}
+        </span>
+      )}
+    </span>
+  )
+}
+
+// ── Gifting tips section (unclaimed items only) ───────────────────────────────
+
+/**
+ * Collapsible "💡 Gifting tips" section for unclaimed items that carry DNA tags.
+ * Shows the plain-English guidance sentence from generateAlternativeGuidance so
+ * gifters know what kind of item the wisher actually prefers — even before the
+ * item is claimed.
+ */
+function GiftingTipsSection({ guidance }: { guidance: string }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div
+      style={{
+        marginTop:    '4px',
+        borderRadius: '8px',
+        overflow:     'hidden',
+        border:       `1px solid ${open ? tokens.colors.purpleRing : tokens.colors.border}`,
+        transition:   'border-color 150ms ease',
+      }}
+    >
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        style={{
+          display:        'flex',
+          alignItems:     'center',
+          justifyContent: 'space-between',
+          width:          '100%',
+          padding:        '6px 10px',
+          background:     open ? tokens.colors.purpleDim : tokens.colors.surface2,
+          border:         'none',
+          cursor:         'pointer',
+          textAlign:      'left',
+          gap:            '6px',
+          transition:     'background 150ms ease',
+        }}
+      >
+        <span
+          style={{
+            fontSize:   '10.5px',
+            fontWeight: 600,
+            color:      open ? tokens.colors.purple : tokens.colors.muted,
+            lineHeight: 1.4,
+            transition: 'color 150ms ease',
+          }}
+        >
+          💡 Gifting tips
+        </span>
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 12 12"
+          fill="none"
+          aria-hidden="true"
+          style={{
+            flexShrink: 0,
+            transition: 'transform 200ms ease',
+            transform:  open ? 'rotate(90deg)' : 'rotate(0deg)',
+            color:      tokens.colors.muted,
+          }}
+        >
+          <path
+            d="M4.5 2.5L8 6l-3.5 3.5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          style={{
+            padding:    '8px 10px',
+            background: tokens.colors.surface,
+            borderTop:  `1px solid ${tokens.colors.purpleRing}`,
+          }}
+        >
+          <p
+            style={{
+              margin:     0,
+              fontSize:   '11px',
+              color:      tokens.colors.text,
+              lineHeight: 1.5,
+            }}
+          >
+            {guidance}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
 function ExternalLinkIcon() {
@@ -115,15 +289,25 @@ interface GiftCardProps {
   wisherUserId:       string
   /** Public username slug — used to identify the gifter page in analytics */
   gifterPageUsername: string
+  /**
+   * First name of the wisher, forwarded to AlternativeGiftPanel.
+   * Used in "Can't find this? Here's what [Name] actually wants".
+   * Defaults to "they" / "their" inside the panel when not provided.
+   */
+  wisherFirstName?:   string
 }
 
-export function GiftCard({ item, wisherUserId, gifterPageUsername }: GiftCardProps) {
+export function GiftCard({ item, wisherUserId, gifterPageUsername, wisherFirstName }: GiftCardProps) {
   // Track image load state: 'loading' | 'loaded' | 'error'
   const [imgState, setImgState] = useState<'loading' | 'loaded' | 'error'>(
     item.image_url ? 'loading' : 'error',
   )
 
   const isClaimed  = item.is_claimed
+  const hasTags    = Array.isArray(item.dna_tags) && item.dna_tags.length > 0
+
+  // Pre-compute guidance for unclaimed items so we only call generateAlternativeGuidance once
+  const guidance   = !isClaimed && hasTags ? generateAlternativeGuidance(item) : null
 
   // ── Resolve the best buy URL for this item ───────────────────────────────
   //
@@ -320,28 +504,35 @@ export function GiftCard({ item, wisherUserId, gifterPageUsername }: GiftCardPro
           </div>
         )}
 
-        {/* DNA tag pills — only when tags exist */}
-        {item.dna_tags.length > 0 && (
-          <div className="flex gap-1 flex-wrap">
+        {/* DNA tag pills with hover tooltips — up to 3 shown, clipped beyond that */}
+        {hasTags && (
+          <div
+            className="flex gap-1 flex-wrap"
+            // Contain the absolutely-positioned tooltips
+            style={{ position: 'relative' }}
+          >
             {item.dna_tags.slice(0, 3).map((tag) => (
+              <DnaTagPill key={tag} tag={tag} />
+            ))}
+            {item.dna_tags.length > 3 && (
               <span
-                key={tag}
-                className="rounded-full"
                 style={{
                   fontSize:   '10px',
-                  fontWeight: 600,
-                  padding:    '2px 7px',
-                  background: tokens.colors.purpleDim,
-                  border:     `1px solid ${tokens.colors.purpleRing}`,
-                  color:      tokens.colors.purple,
+                  fontWeight: 500,
+                  color:      tokens.colors.muted,
                   lineHeight: 1.6,
-                  whiteSpace: 'nowrap',
+                  alignSelf:  'center',
                 }}
               >
-                {tag}
+                +{item.dna_tags.length - 3}
               </span>
-            ))}
+            )}
           </div>
+        )}
+
+        {/* Gifting tips — collapsible, unclaimed items with actionable guidance */}
+        {!isClaimed && guidance && (
+          <GiftingTipsSection guidance={guidance} />
         )}
 
         {/* Push action area to bottom of card */}
@@ -375,6 +566,14 @@ export function GiftCard({ item, wisherUserId, gifterPageUsername }: GiftCardPro
               >
                 {claimAttribution}
               </p>
+            )}
+
+            {/* Alternative gift panel — only when item has DNA tags */}
+            {hasTags && (
+              <AlternativeGiftPanel
+                item={item}
+                wisherFirstName={wisherFirstName}
+              />
             )}
           </div>
 

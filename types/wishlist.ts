@@ -33,6 +33,8 @@ export interface WishlistItem {
   id:               string
   /** Owner's Supabase user UUID */
   user_id:          string
+  /** UUID of the wishlist this item belongs to; null/absent for legacy orphan items */
+  wishlist_id?:     string | null
 
   // ── Product data ────────────────────────────────────────────────────────────
   title:            string

@@ -78,9 +78,15 @@ interface GiftGridProps {
   items:              WishlistItem[]
   wisherUserId:       string
   gifterPageUsername: string
+  /**
+   * First name of the wisher, threaded down to GiftCard → AlternativeGiftPanel.
+   * Used in "Can't find this? Here's what [Name] actually wants".
+   * Falls back to "they" / "their" when not provided.
+   */
+  wisherFirstName?:   string
 }
 
-export function GiftGrid({ items, wisherUserId, gifterPageUsername }: GiftGridProps) {
+export function GiftGrid({ items, wisherUserId, gifterPageUsername, wisherFirstName }: GiftGridProps) {
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all')
 
   const currentFilter = FILTERS.find((f) => f.key === activeFilter) ?? FILTERS[0]
@@ -130,6 +136,7 @@ export function GiftGrid({ items, wisherUserId, gifterPageUsername }: GiftGridPr
               item={item}
               wisherUserId={wisherUserId}
               gifterPageUsername={gifterPageUsername}
+              wisherFirstName={wisherFirstName}
             />
           ))}
         </div>

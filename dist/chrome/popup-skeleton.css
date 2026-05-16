@@ -1,0 +1,104 @@
+/**
+ * extension/popup-skeleton.css — GiftHint Chrome Extension
+ *
+ * Skeleton loading screens for the popup, shown while Supabase returns
+ * the user's saved items. Three card placeholders with a shimmer sweep.
+ *
+ * Usage in popup.js:
+ *   1. Render <div class="skeleton-list"> at the top of the items container
+ *      before the Supabase call resolves.
+ *   2. Remove the element (skeleton.remove()) once real items are rendered
+ *      or an error state is shown.
+ *
+ * Mirrors the colour tokens from tokens.ts so popup and web stay in sync.
+ */
+
+/* ── Shimmer keyframe ──────────────────────────────────────────────────────── */
+
+@keyframes gh-shimmer {
+  0%   { background-position: -280px 0; }
+  100% { background-position:  280px 0; }
+}
+
+/* ── Shared shimmer utility ────────────────────────────────────────────────── */
+
+.gh-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    #1C1C22 0px,
+    #242430 60px,
+    #1C1C22 120px
+  );
+  background-size:  280px 100%;
+  animation:        gh-shimmer 1.5s ease-in-out infinite;
+  border-radius:    4px;
+}
+
+/* ── Skeleton list wrapper ─────────────────────────────────────────────────── */
+
+.skeleton-list {
+  display:        flex;
+  flex-direction: column;
+  gap:            8px;
+  padding:        12px;
+}
+
+/* ── Single skeleton card ──────────────────────────────────────────────────── */
+
+.skeleton-card {
+  display:       flex;
+  align-items:   center;
+  gap:           10px;
+  padding:       10px;
+  border-radius: 10px;
+  background:    #141418;
+  border:        1px solid rgba(240, 238, 232, 0.07);
+}
+
+/* Square thumbnail placeholder */
+.skeleton-card__thumb {
+  width:         52px;
+  height:        52px;
+  border-radius: 8px;
+  flex-shrink:   0;
+}
+
+/* Text lines */
+.skeleton-card__body {
+  flex:           1;
+  display:        flex;
+  flex-direction: column;
+  gap:            7px;
+}
+
+.skeleton-card__title {
+  height: 11px;
+  width:  80%;
+}
+
+.skeleton-card__subtitle {
+  height: 9px;
+  width:  50%;
+}
+
+.skeleton-card__price {
+  height: 10px;
+  width:  30%;
+}
+
+/* ── Skeleton HTML template ────────────────────────────────────────────────── */
+/*
+ * Copy-paste this HTML into popup.html or generate it from popup.js:
+ *
+ * <div class="skeleton-list" id="skeletonList" role="status" aria-label="Loading your list…">
+ *   <div class="skeleton-card">
+ *     <div class="skeleton-card__thumb gh-shimmer"></div>
+ *     <div class="skeleton-card__body">
+ *       <div class="skeleton-card__title  gh-shimmer"></div>
+ *       <div class="skeleton-card__subtitle gh-shimmer"></div>
+ *       <div class="skeleton-card__price  gh-shimmer"></div>
+ *     </div>
+ *   </div>
+ *   <!-- Repeat the .skeleton-card block 2 more times -->
+ * </div>
+ */

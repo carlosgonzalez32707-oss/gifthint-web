@@ -25,14 +25,13 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useOccasionTheme }                  from '@/components/OccasionThemeContext'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const DISMISS_KEY    = 'gh_cta_dismissed'
-const CTA_HREF       = '/get-started'
-const BAR_HEIGHT     = 44          // px — matches the fixed height in styles
-const PURPLE         = '#8B83F0'
-const PURPLE_DARK    = '#7A72DF'   // hover tint for the button
+const DISMISS_KEY = 'gh_cta_dismissed'
+const CTA_HREF    = '/get-started'
+const BAR_HEIGHT  = 44          // px — matches the fixed height in styles
 
 // ── Analytics (fire-and-forget) ───────────────────────────────────────────────
 
@@ -88,6 +87,8 @@ interface ViralCTABarProps {
 }
 
 export function ViralCTABar({ username }: ViralCTABarProps) {
+  const theme = useOccasionTheme()
+
   // Start as null (unknown) to avoid SSR/hydration mismatch
   const [dismissed, setDismissed] = useState<boolean | null>(null)
 
@@ -125,7 +126,7 @@ export function ViralCTABar({ username }: ViralCTABarProps) {
           right:          0,
           zIndex:         1000,
           height:         `${BAR_HEIGHT}px`,
-          background:     PURPLE,
+          background:     theme.accent,
           display:        'flex',
           alignItems:     'center',
           justifyContent: 'space-between',
@@ -179,7 +180,7 @@ export function ViralCTABar({ username }: ViralCTABarProps) {
               display:         'inline-flex',
               alignItems:      'center',
               background:      '#fff',
-              color:           PURPLE,
+              color:           theme.accent,
               borderRadius:    '999px',
               padding:         '5px 14px',
               fontSize:        '12px',
@@ -189,14 +190,8 @@ export function ViralCTABar({ username }: ViralCTABarProps) {
               letterSpacing:   '0.1px',
               transition:      'background 120ms ease, color 120ms ease',
             }}
-            onMouseEnter={(e) => {
-              const el = e.currentTarget
-              el.style.background = '#f0eeff'
-            }}
-            onMouseLeave={(e) => {
-              const el = e.currentTarget
-              el.style.background = '#fff'
-            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f3ff' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = '#fff'    }}
           >
             Create your free list →
           </a>

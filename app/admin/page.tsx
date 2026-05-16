@@ -2,7 +2,7 @@
  * app/admin/page.tsx — GiftHint internal revenue dashboard
  *
  * Server component — all data is fetched at render time, zero client JS
- * except for the Recharts LineChart (which is in RevenueChart.tsx).
+ * except for the Recharts charts (RevenueChart, RevenueFunnel, GrowthMetrics).
  *
  * ACCESS
  * ──────
@@ -25,8 +25,18 @@ import { createServerClient } from '@/lib/supabase-server'
 import { StatsGrid }         from '@/components/admin/StatsGrid'
 import { RevenueChart }      from '@/components/admin/RevenueChart'
 import { TopItemsTable }     from '@/components/admin/TopItemsTable'
+import { RevenueFunnel }     from '@/components/admin/RevenueFunnel'
+import { NetworkBreakdown }  from '@/components/admin/NetworkBreakdown'
+import { RetailerLeaderboard } from '@/components/admin/RetailerLeaderboard'
+import { GrowthMetrics }     from '@/components/admin/GrowthMetrics'
 import type { TopItem }      from '@/components/admin/TopItemsTable'
 import type { DailyClickRow } from '@/components/admin/RevenueChart'
+import type { FunnelData }   from '@/components/admin/RevenueFunnel'
+import type { NetworkData }  from '@/components/admin/NetworkBreakdown'
+import type { RetailerRow }  from '@/components/admin/RetailerLeaderboard'
+import type { GrowthData }   from '@/components/admin/GrowthMetrics'
+import { ReconciliationTable } from '@/components/admin/ReconciliationTable'
+import type { ReconciliationRow } from '@/components/admin/ReconciliationTable'
 import { tokens }            from '@/tokens'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -90,7 +100,6 @@ async function fetchStats(supabase: ReturnType<typeof createServerClient>): Prom
 async function fetchDailyClicks(
   supabase: ReturnType<typeof createServerClient>,
 ): Promise<DailyClickRow[]> {
-  // Last 30 days, grouped by date + affiliate_network
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
   const { data, error } = await supabase
@@ -100,21 +109,19 @@ async function fetchDailyClicks(
 
   if (error || !data) return []
 
-  // Aggregate by date × network
   const map = new Map<string, { amazon: number; skimlinks: number }>()
 
   for (const row of data as { clicked_at: string; affiliate_network: string }[]) {
-    const date = row.clicked_at.slice(0, 10)   // YYYY-MM-DD
+    const date = row.clicked_at.slice(0, 10)
     if (!map.has(date)) map.set(date, { amazon: 0, skimlinks: 0 })
     const entry = map.get(date)!
     if (row.affiliate_network === 'amazon_associates') entry.amazon++
     else if (row.affiliate_network === 'skimlinks')    entry.skimlinks++
   }
 
-  // Fill in all 30 days so the chart has no gaps
   const rows: DailyClickRow[] = []
   for (let i = 29; i >= 0; i--) {
-    const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
+    const d    = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
     const date = d.toISOString().slice(0, 10)
     const entry = map.get(date) ?? { amazon: 0, skimlinks: 0 }
     rows.push({ date, amazon: entry.amazon, skimlinks: entry.skimlinks })
@@ -126,8 +133,6 @@ async function fetchDailyClicks(
 async function fetchTopItems(
   supabase: ReturnType<typeof createServerClient>,
 ): Promise<TopItem[]> {
-  // Click counts per item — aggregate in JS since Supabase doesn't support
-  // GROUP BY in the JS client without raw SQL or RPC.
   const { data: clicks } = await supabase
     .from('click_events')
     .select('item_id, retailer, affiliate_network')
@@ -172,6 +177,235 @@ async function fetchTopItems(
   })
 }
 
+async function fetchFunnelData(
+  supabase: ReturnType<typeof createServerClient>,
+): Promise<FunnelData> {
+  const { data, error } = await supabase
+    .from('conversion_funnel')
+    .select('*')
+    .single()
+
+  if (error || !data) {
+    return { views: 0, buy_clicks: 0, claims: 0, est_revenue: 0 }
+  }
+
+  const row = data as {
+    views:       number | string
+    buy_clicks:  number | string
+    claims:      number | string
+    est_revenue: number | string | null
+  }
+
+  return {
+    views:       Number(row.views)      || 0,
+    buy_clicks:  Number(row.buy_clicks) || 0,
+    claims:      Number(row.claims)     || 0,
+    est_revenue: Number(row.est_revenue ?? 0),
+  }
+}
+
+async function fetchNetworkData(
+  supabase: ReturnType<typeof createServerClient>,
+): Promise<NetworkData> {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+
+  const { data, error } = await supabase
+    .from('click_events')
+    .select('affiliate_network, estimated_commission')
+    .gte('clicked_at', since)
+
+  if (error || !data) {
+    return {
+      amazon:           { clicks: 0, est_revenue: 0, avg_order: 0 },
+      skimlinks:        { clicks: 0, est_revenue: 0, avg_order: 0 },
+      unknown_clicks:   0,
+      total_clicks:     0,
+      coverage_gap_pct: 0,
+    }
+  }
+
+  type ClickRow = { affiliate_network: string; estimated_commission: number | null }
+  const rows = data as ClickRow[]
+
+  const agg = (network: string) => {
+    const subset = rows.filter((r) => r.affiliate_network === network)
+    const clicks      = subset.length
+    const est_revenue = subset.reduce((s, r) => s + (r.estimated_commission ?? 0), 0)
+    return {
+      clicks,
+      est_revenue: Math.round(est_revenue * 100) / 100,
+      avg_order:   clicks === 0 ? 0 : Math.round((est_revenue / clicks) * 100) / 100,
+    }
+  }
+
+  const amazon    = agg('amazon_associates')
+  const skimlinks = agg('skimlinks')
+  const unknown_clicks = rows.filter(
+    (r) => r.affiliate_network !== 'amazon_associates' && r.affiliate_network !== 'skimlinks',
+  ).length
+  const total_clicks    = rows.length
+  const coverage_gap_pct =
+    total_clicks === 0 ? 0 : Math.round((unknown_clicks / total_clicks) * 1000) / 10
+
+  return { amazon, skimlinks, unknown_clicks, total_clicks, coverage_gap_pct }
+}
+
+async function fetchRetailerLeaderboard(
+  supabase: ReturnType<typeof createServerClient>,
+): Promise<RetailerRow[]> {
+  const { data, error } = await supabase
+    .from('click_events')
+    .select('retailer, affiliate_network, estimated_commission')
+
+  if (error || !data) return []
+
+  type ClickRow = { retailer: string | null; affiliate_network: string; estimated_commission: number | null }
+  const rows = data as ClickRow[]
+
+  const map = new Map<string, { clicks: number; network: string; est_rev: number }>()
+
+  for (const r of rows) {
+    const key = r.retailer?.toLowerCase() ?? 'unknown'
+    if (!map.has(key)) {
+      map.set(key, { clicks: 0, network: r.affiliate_network ?? 'unknown', est_rev: 0 })
+    }
+    const entry = map.get(key)!
+    entry.clicks++
+    entry.est_rev += r.estimated_commission ?? 0
+    // Use most specific network (amazon_associates > skimlinks > unknown)
+    if (r.affiliate_network === 'amazon_associates') entry.network = 'amazon_associates'
+    else if (r.affiliate_network === 'skimlinks' && entry.network === 'unknown') {
+      entry.network = 'skimlinks'
+    }
+  }
+
+  return Array.from(map.entries())
+    .sort((a, b) => b[1].clicks - a[1].clicks)
+    .slice(0, 20)
+    .map(([retailer, { clicks, network, est_rev }]) => ({
+      retailer,
+      clicks,
+      network,
+      est_rev: Math.round(est_rev * 100) / 100,
+    }))
+}
+
+async function fetchReconciliationRows(
+  supabase: ReturnType<typeof createServerClient>,
+): Promise<ReconciliationRow[]> {
+  // Pull 90 days of data; the client-side date range selector filters further.
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10)
+
+  const { data, error } = await supabase
+    .from('affiliate_reconciliation')
+    .select('*')
+    .gte('report_date', since)
+    .order('report_date', { ascending: false })
+
+  if (error || !data) {
+    console.error('[admin] affiliate_reconciliation query failed:', error?.message)
+    return []
+  }
+
+  return (data as ReconciliationRow[]).map((r) => ({
+    report_date:       r.report_date,
+    network:           r.network,
+    network_clicks:    Number(r.network_clicks)   || 0,
+    internal_clicks:   Number(r.internal_clicks)  || 0,
+    actual_revenue:    Number(r.actual_revenue)   || 0,
+    estimated_revenue: Number(r.estimated_revenue) || 0,
+    variance_pct:      r.variance_pct !== null ? Number(r.variance_pct) : null,
+    synced_at:         r.synced_at,
+  }))
+}
+
+async function fetchGrowthData(
+  supabase: ReturnType<typeof createServerClient>,
+): Promise<GrowthData> {
+  const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const since7  = new Date(Date.now() -  7 * 24 * 60 * 60 * 1000).toISOString()
+  const since14 = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
+
+  const [usersRes, viewsRes, ctaRes] = await Promise.all([
+    // Users created in last 30 days
+    supabase
+      .from('users')
+      .select('created_at')
+      .gte('created_at', since30),
+    // Gifter page views in the 7-day window before this week (days 8-14 ago)
+    supabase
+      .from('page_views')
+      .select('id', { count: 'exact', head: true })
+      .gte('viewed_at', since14)
+      .lt('viewed_at', since7),
+    // Top referring wishlists via CTA click events
+    supabase
+      .from('cta_events')
+      .select('gifter_page_username, gifter_page_slug, wishlist_title')
+      .not('gifter_page_username', 'is', null),
+  ])
+
+  // ── Daily signups (last 30 days, gapless) ──
+  type UserRow = { created_at: string }
+  const userRows = (usersRes.data ?? []) as UserRow[]
+  const signupMap = new Map<string, number>()
+  for (const u of userRows) {
+    const date = u.created_at.slice(0, 10)
+    signupMap.set(date, (signupMap.get(date) ?? 0) + 1)
+  }
+
+  const daily_signups = []
+  for (let i = 29; i >= 0; i--) {
+    const d    = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
+    const date = d.toISOString().slice(0, 10)
+    daily_signups.push({ date, users: signupMap.get(date) ?? 0 })
+  }
+
+  const total_new_users = userRows.length
+
+  // ── Viral coefficient: new users this week / gifter views last week ──
+  const newThisWeek   = userRows.filter((u) => u.created_at >= since7).length
+  const viewsLastWeek = viewsRes.count ?? 0
+  const viral_coefficient =
+    viewsLastWeek === 0 ? 0 : Math.round((newThisWeek / viewsLastWeek) * 100) / 100
+
+  // ── Top referrers: aggregate CTA clicks by wishlist ──
+  type CtaRow = {
+    gifter_page_username: string | null
+    gifter_page_slug:     string | null
+    wishlist_title:       string | null
+  }
+  const ctaRows = (ctaRes.data ?? []) as CtaRow[]
+  const ctaMap  = new Map<string, { cta_clicks: number; title: string; slug: string }>()
+
+  for (const c of ctaRows) {
+    if (!c.gifter_page_username) continue
+    const key = `${c.gifter_page_username}/${c.gifter_page_slug ?? ''}`
+    if (!ctaMap.has(key)) {
+      ctaMap.set(key, {
+        cta_clicks: 0,
+        title:      c.wishlist_title ?? c.gifter_page_slug ?? '',
+        slug:       c.gifter_page_slug ?? '',
+      })
+    }
+    ctaMap.get(key)!.cta_clicks++
+  }
+
+  const top_referrers = Array.from(ctaMap.entries())
+    .sort((a, b) => b[1].cta_clicks - a[1].cta_clicks)
+    .slice(0, 10)
+    .map(([key, { cta_clicks, title, slug }]) => ({
+      wisher_username: key.split('/')[0],
+      wishlist_slug:   slug,
+      wishlist_title:  title,
+      cta_clicks,
+    }))
+
+  return { daily_signups, total_new_users, viral_coefficient, top_referrers }
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 interface AdminPageProps {
@@ -184,14 +418,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   if (!adminEmail) notFound()
 
   // ── Cookie seeding (first-time setup) ─────────────────────────────────────
-  // If ?secret=... matches ADMIN_SECRET, set the admin cookie and redirect.
-  const incomingSecret  = typeof searchParams.secret === 'string'
-    ? searchParams.secret
-    : null
+  const incomingSecret   = typeof searchParams.secret === 'string' ? searchParams.secret : null
   const configuredSecret = process.env.ADMIN_SECRET
 
   if (incomingSecret && configuredSecret && incomingSecret === configuredSecret) {
-    // Set the cookie and redirect to the clean URL
     const cookieStore = await cookies()
     cookieStore.set(ADMIN_COOKIE, configuredSecret, {
       httpOnly: true,
@@ -212,23 +442,29 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
   // ── Fetch all dashboard data in parallel ───────────────────────────────────
   const supabase = createServerClient()
-  const [stats, dailyClicks, topItems] = await Promise.all([
-    fetchStats(supabase),
-    fetchDailyClicks(supabase),
-    fetchTopItems(supabase),
-  ])
+  const [stats, dailyClicks, topItems, funnelData, networkData, retailerRows, growthData, reconciliationRows] =
+    await Promise.all([
+      fetchStats(supabase),
+      fetchDailyClicks(supabase),
+      fetchTopItems(supabase),
+      fetchFunnelData(supabase),
+      fetchNetworkData(supabase),
+      fetchRetailerLeaderboard(supabase),
+      fetchGrowthData(supabase),
+      fetchReconciliationRows(supabase),
+    ])
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <main
       style={{
-        minHeight:   '100vh',
-        background:  tokens.colors.bg,
-        color:       tokens.colors.text,
-        fontFamily:  tokens.font.sans,
-        padding:     '32px 24px 64px',
-        maxWidth:    '1200px',
-        margin:      '0 auto',
+        minHeight:  '100vh',
+        background: tokens.colors.bg,
+        color:      tokens.colors.text,
+        fontFamily: tokens.font.sans,
+        padding:    '32px 24px 64px',
+        maxWidth:   '1200px',
+        margin:     '0 auto',
       }}
     >
       {/* ── Header ─────────────────────────────────────────────────────────── */}
@@ -246,13 +482,13 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           </div>
           <span
             style={{
-              fontSize:   '11px',
-              fontWeight: 600,
-              padding:    '4px 10px',
+              fontSize:     '11px',
+              fontWeight:   600,
+              padding:      '4px 10px',
               borderRadius: tokens.radius.pill,
-              background: tokens.colors.purpleDim,
-              color:      tokens.colors.purple,
-              border:     `1px solid ${tokens.colors.purpleRing}`,
+              background:   tokens.colors.purpleDim,
+              color:        tokens.colors.purple,
+              border:       `1px solid ${tokens.colors.purpleRing}`,
             }}
           >
             INTERNAL
@@ -264,6 +500,33 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       <section style={{ marginBottom: '32px' }}>
         <SectionLabel>Key Metrics</SectionLabel>
         <StatsGrid stats={stats} />
+      </section>
+
+      {/* ── Conversion funnel ──────────────────────────────────────────────── */}
+      <section style={{ marginBottom: '32px' }}>
+        <SectionLabel>30-Day Conversion Funnel</SectionLabel>
+        <div
+          style={{
+            background:   tokens.colors.surface,
+            borderRadius: tokens.radius.lg,
+            border:       `1px solid ${tokens.colors.border}`,
+            padding:      '24px',
+          }}
+        >
+          <RevenueFunnel data={funnelData} />
+        </div>
+      </section>
+
+      {/* ── Network breakdown ──────────────────────────────────────────────── */}
+      <section style={{ marginBottom: '32px' }}>
+        <SectionLabel>Affiliate Network Performance — Last 30 Days</SectionLabel>
+        <NetworkBreakdown data={networkData} />
+      </section>
+
+      {/* ── Retailer leaderboard ───────────────────────────────────────────── */}
+      <section style={{ marginBottom: '32px' }}>
+        <SectionLabel>Retailer Leaderboard — All Time</SectionLabel>
+        <RetailerLeaderboard rows={retailerRows} />
       </section>
 
       {/* ── Click chart ────────────────────────────────────────────────────── */}
@@ -279,6 +542,18 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
         >
           <RevenueChart data={dailyClicks} />
         </div>
+      </section>
+
+      {/* ── Growth metrics ──────────────────────────────────────────────────── */}
+      <section style={{ marginBottom: '32px' }}>
+        <SectionLabel>User Growth & Viral Metrics</SectionLabel>
+        <GrowthMetrics data={growthData} />
+      </section>
+
+      {/* ── Revenue reconciliation ──────────────────────────────────────────── */}
+      <section style={{ marginBottom: '32px' }}>
+        <SectionLabel>Estimate vs Actual — Affiliate Revenue Reconciliation</SectionLabel>
+        <ReconciliationTable rows={reconciliationRows} />
       </section>
 
       {/* ── Top items table ─────────────────────────────────────────────────── */}

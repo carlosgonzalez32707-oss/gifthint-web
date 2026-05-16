@@ -3,6 +3,14 @@
     {
       "path": "/api/cron/send-reminders",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/sync-affiliate-data",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-digest",
+      "schedule": "0 9 * * 1"
     }
   ]
 }

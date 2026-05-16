@@ -31,6 +31,7 @@ export type DbUser = {
 export type DbWishlistItem = {
   id:               string
   user_id:          string
+  wishlist_id?:     string | null
   title:            string
   price:            number | null
   currency:         string
@@ -47,6 +48,18 @@ export type DbWishlistItem = {
   claimed_anonymous: boolean
   sort_order:       number
   created_at:       string
+}
+
+export type DbWishlist = {
+  id:            string
+  user_id:       string
+  title:         string
+  occasion:      string
+  occasion_date: string | null
+  slug:          string
+  is_default:    boolean
+  is_public:     boolean
+  created_at:    string
 }
 
 // ── Client factory ─────────────────────────────────────────────────────────────

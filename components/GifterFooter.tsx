@@ -12,8 +12,11 @@
  * On narrow mobile the two-column row stacks vertically.
  */
 
-import Link from 'next/link'
-import { tokens } from '@/tokens'
+'use client'
+
+import Link                    from 'next/link'
+import { tokens }              from '@/tokens'
+import { useOccasionTheme }    from '@/components/OccasionThemeContext'
 
 // ── InfoIcon ──────────────────────────────────────────────────────────────────
 
@@ -40,6 +43,8 @@ function InfoIcon() {
 // ── GifterFooter ──────────────────────────────────────────────────────────────
 
 export function GifterFooter() {
+  const theme = useOccasionTheme()
+
   return (
     <footer
       aria-label="Site footer"
@@ -135,6 +140,30 @@ export function GifterFooter() {
         </div>
       </div>
 
+      {/* ── Create-your-own CTA ────────────────────────────────────────────── */}
+      <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+        <a
+          href="/get-started"
+          style={{
+            display:        'inline-flex',
+            alignItems:     'center',
+            gap:            '6px',
+            padding:        '9px 22px',
+            borderRadius:   '999px',
+            background:     theme.accentDim,
+            border:         `1px solid ${theme.accentRing}`,
+            color:          theme.accent,
+            fontSize:       '12.5px',
+            fontWeight:     700,
+            textDecoration: 'none',
+            letterSpacing:  '-0.01em',
+            transition:     'background 150ms ease',
+          }}
+        >
+          ✨ Create your own free wishlist
+        </a>
+      </div>
+
       {/* ── Navigation links ───────────────────────────────────────────────── */}
       <nav
         aria-label="Footer navigation"
@@ -168,14 +197,13 @@ export function GifterFooter() {
             >
               {label}
             </Link>
-            {/* Separator dot — not after the last item */}
             {i < arr.length - 1 && (
               <span
                 aria-hidden="true"
                 style={{
-                  fontSize: '11px',
-                  color:    tokens.colors.muted,
-                  opacity:  0.35,
+                  fontSize:   '11px',
+                  color:      tokens.colors.muted,
+                  opacity:    0.35,
                   userSelect: 'none',
                 }}
               >

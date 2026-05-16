@@ -16,15 +16,41 @@
 
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, lazy, Suspense } from 'react'
+import Image                              from 'next/image'
 import { createClient }                   from '@supabase/supabase-js'
 import { tokens }                         from '@/tokens'
 import { trackBuyClick,
          inferAffiliateNetwork }          from '@/lib/analytics'
 import { useRealtimeClaims }              from '@/hooks/useRealtimeClaims'
-import { GifterCoordinationPanel }        from '@/components/GifterCoordinationPanel'
-import { ReminderSignup }                 from '@/components/ReminderSignup'
+import { OccasionHero }                   from '@/components/OccasionHero'
+import { GifterFooter }                   from '@/components/GifterFooter'
+import { ViralCTABar }                    from '@/components/ViralCTABar'
+import { OccasionThemeProvider }          from '@/components/OccasionThemeContext'
+import { getOccasionTheme }               from '@/lib/occasion-themes'
+import { AlternativeGiftPanel }           from '@/components/AlternativeGiftPanel'
+import { DNA_TAG_TOOLTIPS }               from '@/lib/dna-tags'
+import { generateAlternativeGuidance }    from '@/lib/alternative-guidance'
+import type { DbWishlist }               from '@/lib/supabase-server'
 import type { WishUser, WishItem }        from './page'
+
+// ── Lazy-loaded below-fold components ─────────────────────────────────────────
+// Code-splitting these keeps the initial JS bundle tight and lets the gift grid
+// paint before the WebSocket panel and email signup are even downloaded.
+const ReminderSignup = lazy(() =>
+  import('@/components/ReminderSignup').then((m) => ({ default: m.ReminderSignup }))
+)
+const GifterCoordinationPanel = lazy(() =>
+  import('@/components/GifterCoordinationPanel').then((m) => ({ default: m.GifterCoordinationPanel }))
+)
+
+// ── Product image blur placeholder ────────────────────────────────────────────
+// 10×10 SVG filled with the app's surface2 colour (#1C1C22).
+// Used as the blur-up base while next/image fetches the real product photo.
+const PRODUCT_BLUR_PLACEHOLDER =
+  'data:image/svg+xml;base64,' +
+  'PHN2ZyB3aWR0aD0iMTAiIGhlaWdodD0iMTAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+' +
+  'PHJlY3Qgd2lkdGg9IjEwIiBoZWlnaHQ9IjEwIiBmaWxsPSIjMUMxQzIyIi8+PC9zdmc+'
 
 // ── Browser Supabase client (anon key — safe to expose) ───────────────────────
 // Only used for claim mutations; reads are handled server-side in page.tsx.
@@ -36,32 +62,25 @@ const supabaseBrowser = createClient(
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type GifterPageProps = {
-  user:  WishUser
-  items: WishItem[]
-}
-
-// ── Utility ───────────────────────────────────────────────────────────────────
-
-function initials(name: string): string {
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
+  user:      WishUser
+  items:     WishItem[]
+  /** Present when rendered from /list/[username]/[slug]; absent from legacy routes. */
+  wishlist?: DbWishlist
 }
 
 // ── Root component ────────────────────────────────────────────────────────────
 
-export default function GifterPage({ user, items: initialItems }: GifterPageProps) {
+export default function GifterPage({ user, items: initialItems, wishlist }: GifterPageProps) {
   // Optimistic claim updates live here — items prop is server-rendered initial state
   const [items, setItems] = useState<WishItem[]>(initialItems)
   const [activeTag, setActiveTag] = useState<string | null>(null)
 
   const name    = user.display_name?.split(' ')[0] ?? user.public_username ?? 'Someone'
   const appUrl  = process.env.NEXT_PUBLIC_APP_URL ?? 'https://gifthint.io'
-  const listUrl = `${appUrl}/list/${user.public_username}`
+  // When serving from a slug route, link directly to that list; fall back to profile
+  const listUrl = wishlist
+    ? `${appUrl}/list/${user.public_username}/${wishlist.slug}`
+    : `${appUrl}/list/${user.public_username}`
 
   // ── Realtime claimed state ─────────────────────────────────────────────────
   // Seed with IDs already claimed in the server render so the hook never
@@ -174,177 +193,77 @@ export default function GifterPage({ user, items: initialItems }: GifterPageProp
     }
   }
 
-  return (
-    <div
-      style={{
-        background:  tokens.colors.bg,
-        color:       tokens.colors.text,
-        minHeight:   '100vh',
-        fontFamily:  tokens.font.sans,
-      }}
-    >
-      <CtaBar appUrl={appUrl} />
-
-      <main className="max-w-4xl mx-auto">
-        <HeroSection
-          user={user}
-          name={name}
-          itemCount={items.length}
-          listUrl={listUrl}
-        />
-
-        {allTags.length > 0 && (
-          <FilterBar
-            tags={allTags}
-            activeTag={activeTag}
-            onTagChange={setActiveTag}
-          />
-        )}
-
-        <GiftGrid
-          items={visibleItems}
-          allItems={effectiveItems}
-          name={name}
-          activeTag={activeTag}
-          onClearFilter={() => setActiveTag(null)}
-          onClaim={handleClaim}
-          onUnclaim={handleUnclaim}
-          wisherUserId={user.id}
-          gifterPageUsername={user.public_username ?? ''}
-          newlyClaimedId={newlyClaimedId}
-        />
-
-        <ReminderSignup
-          wisherUsername={user.public_username ?? ''}
-          wisherName={name}
-        />
-
-        {/* ── Gifter coordination panel ──────────────────────────────── */}
-        {/* Shows claimed items so multiple gifters can coordinate.       */}
-        {/* claimedCount is derived from effectiveItems (merges Realtime) */}
-        <GifterCoordinationPanel
-          username={user.public_username ?? ''}
-          claimedCount={effectiveItems.filter((i) => i.is_claimed).length}
-        />
-      </main>
-
-      <PageFooter appUrl={appUrl} />
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CtaBar
-// ─────────────────────────────────────────────────────────────────────────────
-
-function CtaBar({ appUrl }: { appUrl: string }) {
-  return (
-    <a
-      href={appUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center justify-center gap-1.5 w-full py-2.5 px-4 text-center text-xs font-semibold transition-opacity hover:opacity-80"
-      style={{
-        background:   `linear-gradient(90deg, ${tokens.colors.surface} 0%, rgba(139,131,240,0.10) 50%, ${tokens.colors.surface} 100%)`,
-        borderBottom: `1px solid ${tokens.colors.border}`,
-        color:        tokens.colors.purple,
-      }}
-    >
-      <span aria-hidden="true">✨</span>
-      {/* Desktop / tablet: full copy */}
-      <span className="hidden sm:inline">
-        Save anything. Share your list.{' '}
-        <span className="underline underline-offset-2">Create yours free →</span>
-      </span>
-      {/* Mobile: short copy so the bar fits in one line */}
-      <span className="sm:hidden">
-        <span className="underline underline-offset-2">Create your free wishlist →</span>
-      </span>
-    </a>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// HeroSection
-// ─────────────────────────────────────────────────────────────────────────────
-
-function HeroSection({
-  user,
-  name,
-  itemCount,
-  listUrl,
-}: {
-  user:      WishUser
-  name:      string
-  itemCount: number
-  listUrl:   string
-}) {
-  const [copied, setCopied] = useState(false)
-
-  async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(listUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch (_) {
-      /* clipboard unavailable on http:// */
-    }
-  }
+  // Resolve the theme once at the top level — all descendants share it via context
+  const theme = getOccasionTheme(wishlist?.occasion ?? 'other')
 
   return (
-    <section className="flex flex-col items-center gap-4 px-4 py-12 text-center">
-      {/* Avatar */}
+    <OccasionThemeProvider theme={theme}>
       <div
-        className="w-20 h-20 rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center text-2xl font-bold select-none"
         style={{
-          background: user.avatar_url
-            ? 'transparent'
-            : `linear-gradient(140deg, ${tokens.colors.purple} 0%, #b0aaff 100%)`,
-          color:  '#fff',
-          border: `3px solid ${tokens.colors.purpleRing}`,
+          background:  tokens.colors.bg,
+          color:       tokens.colors.text,
+          minHeight:   '100vh',
+          fontFamily:  tokens.font.sans,
         }}
       >
-        {user.avatar_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={user.avatar_url}
-            alt={name}
-            className="w-full h-full object-cover"
+        {/* ViralCTABar reads accent colour from OccasionThemeContext */}
+        <ViralCTABar username={user.public_username ?? ''} />
+
+        <main className="max-w-4xl mx-auto">
+          {/* OccasionHero replaces the inline HeroSection — reads theme from context */}
+          <OccasionHero
+            user={user}
+            wishlist={wishlist}
+            itemCount={items.length}
+            listUrl={listUrl}
           />
-        ) : (
-          initials(user.display_name ?? name)
-        )}
-      </div>
 
-      {/* Name + subtitle */}
-      <div className="flex flex-col gap-1">
-        <h1
-          className="text-3xl font-extrabold tracking-tight"
-          style={{ color: tokens.colors.text }}
-        >
-          {name}&apos;s Gift List
-        </h1>
-        <p className="text-sm" style={{ color: tokens.colors.muted }}>
-          {itemCount} {itemCount === 1 ? 'gift' : 'gifts'} ·{' '}
-          <span style={{ fontFamily: tokens.font.mono }}>
-            {listUrl.replace('https://', '')}
-          </span>
-        </p>
-      </div>
+          {allTags.length > 0 && (
+            <FilterBar
+              tags={allTags}
+              activeTag={activeTag}
+              onTagChange={setActiveTag}
+            />
+          )}
 
-      {/* Copy share link */}
-      <button
-        onClick={copyLink}
-        className="flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold transition-all"
-        style={{
-          background:  copied ? tokens.colors.greenDim  : tokens.colors.purpleDim,
-          border:      `1px solid ${copied ? tokens.colors.greenRing : tokens.colors.purpleRing}`,
-          color:       copied ? tokens.colors.green     : tokens.colors.purple,
-        }}
-      >
-        {copied ? '✓ Copied!' : '🔗 Copy gift list link'}
-      </button>
-    </section>
+          <GiftGrid
+            items={visibleItems}
+            allItems={effectiveItems}
+            name={name}
+            activeTag={activeTag}
+            onClearFilter={() => setActiveTag(null)}
+            onClaim={handleClaim}
+            onUnclaim={handleUnclaim}
+            wisherUserId={user.id}
+            gifterPageUsername={user.public_username ?? ''}
+            newlyClaimedId={newlyClaimedId}
+          />
+
+          {/* ReminderSignup is below the fold — load lazily after the gift grid paints */}
+          <Suspense fallback={null}>
+            <ReminderSignup
+              wisherUsername={user.public_username ?? ''}
+              wisherName={name}
+            />
+          </Suspense>
+
+          {/*
+            GifterCoordinationPanel opens a realtime claims feed on first expand.
+            Lazy-loading keeps its WebSocket setup out of the critical path so the
+            gift grid renders immediately from the server-fetched data.
+          */}
+          <Suspense fallback={null}>
+            <GifterCoordinationPanel
+              username={user.public_username ?? ''}
+              claimedCount={effectiveItems.filter((i) => i.is_claimed).length}
+            />
+          </Suspense>
+        </main>
+
+        {/* GifterFooter reads accent colour from OccasionThemeContext */}
+        <GifterFooter />
+      </div>
+    </OccasionThemeProvider>
   )
 }
 
@@ -503,14 +422,16 @@ function GiftGrid({
               gap:                 '12px',
             }}
           >
-            {items.map((item) => (
+            {items.map((item, index) => (
               <GiftCard
                 key={item.id}
                 item={item}
+                index={index}
                 onClaim={onClaim}
                 onUnclaim={onUnclaim}
                 wisherUserId={wisherUserId}
                 gifterPageUsername={gifterPageUsername}
+                wisherFirstName={name}
                 justClaimed={item.id === newlyClaimedId}
               />
             ))}
@@ -534,10 +455,11 @@ function GiftGrid({
           gap:                 '12px',
         }}
       >
-        {items.map((item) => (
+        {items.map((item, index) => (
           <GiftCard
             key={item.id}
             item={item}
+            index={index}
             onClaim={onClaim}
             onUnclaim={onUnclaim}
             wisherUserId={wisherUserId}
@@ -556,17 +478,23 @@ function GiftGrid({
 
 function GiftCard({
   item,
+  index = 0,
   onClaim,
   onUnclaim,
   wisherUserId,
   gifterPageUsername,
+  wisherFirstName,
   justClaimed = false,
 }: {
   item:               WishItem
+  /** Grid position — used to set priority on above-fold images (index < 2) */
+  index?:             number
   onClaim:            (id: string, name: string, anon: boolean) => Promise<void>
   onUnclaim:          (itemId: string, claimedBy: string) => Promise<'ok' | 'mismatch' | 'error'>
   wisherUserId:       string
   gifterPageUsername: string
+  /** First name of the list owner — forwarded to AlternativeGiftPanel */
+  wisherFirstName?:   string
   /** True for ~3 s when this item was claimed by someone else in real-time */
   justClaimed?:       boolean
 }) {
@@ -616,6 +544,10 @@ function GiftCard({
     }
   }
 
+  const hasTags = Array.isArray(item.dna_tags) && item.dna_tags.length > 0
+  // Guidance for unclaimed items — tells the gifter what kind of alternative to look for
+  const guidance = !item.is_claimed && hasTags ? generateAlternativeGuidance(item) : null
+
   // True when the typed name matches the stored claimed_by (case-insensitive).
   // Used to decide whether to offer the unclaim button in the claim form.
   const nameMatchesClaim =
@@ -654,11 +586,24 @@ function GiftCard({
         }}
       >
         {item.image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          /*
+           * next/image with fill covers the aspect-square container.
+           * sizes matches the grid: 2 cols on mobile → ~50vw, 3 on tablet,
+           * capped at 220 px on wide viewports (max-w-4xl layout).
+           * First 2 cards (above the fold) get priority — no lazy-load attr.
+           * All others use the default lazy loading.
+           * placeholder="blur" fades in from the surface2 SVG while the real
+           * image fetches, preventing layout shift.
+           */
+          <Image
             src={item.image_url}
             alt={item.title}
-            className="w-full h-full object-cover"
+            fill
+            sizes="(max-width: 640px) calc(50vw - 24px), (max-width: 1024px) calc(33vw - 20px), 220px"
+            className="object-cover"
+            priority={index < 2}
+            placeholder="blur"
+            blurDataURL={PRODUCT_BLUR_PLACEHOLDER}
           />
         ) : (
           '🎁'
@@ -766,17 +711,19 @@ function GiftCard({
           </p>
         )}
 
-        {/* DNA tags */}
-        {item.dna_tags.length > 0 && (
+        {/* DNA tags — with native browser tooltip on hover */}
+        {hasTags && (
           <div className="flex gap-1.5 flex-wrap">
             {item.dna_tags.slice(0, 3).map((tag) => (
               <span
                 key={tag}
+                title={DNA_TAG_TOOLTIPS[tag]}
                 className="text-xs px-2 py-0.5 rounded-full font-semibold"
                 style={{
                   background: tokens.colors.purpleDim,
                   border:     `1px solid ${tokens.colors.purpleRing}`,
                   color:      tokens.colors.purple,
+                  cursor:     DNA_TAG_TOOLTIPS[tag] ? 'default' : undefined,
                 }}
               >
                 {tag}
@@ -785,21 +732,45 @@ function GiftCard({
           </div>
         )}
 
+        {/* Gifting tips — inline guidance for unclaimed items with actionable DNA tags */}
+        {guidance && (
+          <p
+            className="text-xs leading-relaxed px-2.5 py-2 rounded-lg"
+            style={{
+              background: tokens.colors.purpleDim,
+              border:     `1px solid ${tokens.colors.purpleRing}`,
+              color:      tokens.colors.purple,
+            }}
+          >
+            💡 {guidance}
+          </p>
+        )}
+
         {/* Spacer — pushes action to bottom */}
         <div className="flex-1" />
 
         {/* ── Action area ─────────────────────────────────────────────── */}
         {item.is_claimed ? (
           /* Already claimed */
-          <div
-            className="w-full py-2.5 px-3 rounded-xl text-xs font-semibold text-center"
-            style={{
-              background: tokens.colors.greenDim,
-              border:     `1px solid ${tokens.colors.greenRing}`,
-              color:      tokens.colors.green,
-            }}
-          >
-            {claimedLabel}
+          <div className="flex flex-col gap-1">
+            <div
+              className="w-full py-2.5 px-3 rounded-xl text-xs font-semibold text-center"
+              style={{
+                background: tokens.colors.greenDim,
+                border:     `1px solid ${tokens.colors.greenRing}`,
+                color:      tokens.colors.green,
+              }}
+            >
+              {claimedLabel}
+            </div>
+
+            {/* Alternative gift panel — only when item has DNA preference tags */}
+            {hasTags && (
+              <AlternativeGiftPanel
+                item={item}
+                wisherFirstName={wisherFirstName}
+              />
+            )}
           </div>
 
         ) : claiming ? (
@@ -929,45 +900,3 @@ function GiftCard({
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Footer
-// ─────────────────────────────────────────────────────────────────────────────
-
-function PageFooter({ appUrl }: { appUrl: string }) {
-  return (
-    <footer
-      className="py-10 px-4 text-center text-sm"
-      style={{
-        borderTop: `1px solid ${tokens.colors.border}`,
-        color:     tokens.colors.muted,
-      }}
-    >
-      <p>
-        Made with{' '}
-        <span style={{ color: tokens.colors.pink }}>♥</span>
-        {' '}on{' '}
-        <a
-          href={appUrl}
-          className="font-semibold transition-opacity hover:opacity-80"
-          style={{ color: tokens.colors.purple }}
-        >
-          GiftHint
-        </a>
-      </p>
-
-      <a
-        href={appUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 mt-4 px-5 py-2.5 rounded-full text-xs font-bold transition-all hover:opacity-85"
-        style={{
-          background: tokens.colors.purpleDim,
-          border:     `1px solid ${tokens.colors.purpleRing}`,
-          color:      tokens.colors.purple,
-        }}
-      >
-        ✨ Create your own free wishlist
-      </a>
-    </footer>
-  )
-}

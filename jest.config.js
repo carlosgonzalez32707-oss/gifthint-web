@@ -21,7 +21,11 @@ const config = {
   // Show each test name as it passes/fails
   verbose: true,
   transform: {
-    '^.+\\.tsx?$': 'ts-jest',
+    '^.+\\.tsx?$': ['ts-jest', {
+      // tsconfig.json uses jsx:"preserve" for Next.js — override for Jest so
+      // that ts-jest can compile JSX in React components imported by tests.
+      tsconfig: { jsx: 'react-jsx' },
+    }],
   },
 }
 
