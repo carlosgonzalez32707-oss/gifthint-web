@@ -39,7 +39,7 @@ import { ext } from './compat.js'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const OAUTH_CLIENT_ID = '987313469607-sngektdhq0k17ghcl7ggtsi7k2q19uel.apps.googleusercontent.com'
+const OAUTH_CLIENT_ID = '987313469607-drno4044uvbr9v4fjdkfskuq1o43cd4v.apps.googleusercontent.com'
 const EXCHANGE_URL    = 'https://gifthint.io/api/auth/exchange'
 const SCOPES          = ['email', 'profile', 'openid']
 const USER_KEY        = 'gh_user'
