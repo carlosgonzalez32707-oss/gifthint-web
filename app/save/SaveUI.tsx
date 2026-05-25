@@ -658,10 +658,12 @@ function SignInView() {
 
   async function signIn() {
     setBusy(true)
-    // redirectTo preserves /save?... query params through the OAuth round-trip.
+    // redirectTo goes through the PKCE callback route, which then forwards
+    // back to /save with all query params preserved after code exchange.
+    const next = encodeURIComponent(window.location.pathname + window.location.search)
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.href },
+      options: { redirectTo: `${window.location.origin}/auth/callback?next=${next}` },
     })
     // Browser will redirect — no need to setBusy(false)
   }
