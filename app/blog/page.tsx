@@ -68,6 +68,7 @@ function PostCard({ post }: { post: ReturnType<typeof getAllPosts>[number] }) {
   return (
     <Link
       href={`/blog/${post.slug}`}
+      className="gh-post-card"
       style={{
         display:        'flex',
         flexDirection:  'column',
@@ -80,16 +81,6 @@ function PostCard({ post }: { post: ReturnType<typeof getAllPosts>[number] }) {
         textDecoration: 'none',
         color:          'inherit',
         transition:     'box-shadow 200ms, transform 200ms',
-      }}
-      onMouseOver={(e) => {
-        const el = e.currentTarget
-        el.style.boxShadow = `0 4px 16px rgba(0,0,0,0.10), 0 20px 48px rgba(0,0,0,0.08)`
-        el.style.transform  = 'translateY(-2px)'
-      }}
-      onMouseOut={(e) => {
-        const el = e.currentTarget
-        el.style.boxShadow = c.shadow
-        el.style.transform  = 'translateY(0)'
       }}
     >
       {/* Occasion tag */}
@@ -166,6 +157,7 @@ export default function BlogIndexPage() {
 
   return (
     <div style={{ fontFamily: font, background: c.bg, minHeight: '100vh' }}>
+      <style>{`.gh-post-card:hover{box-shadow:0 4px 16px rgba(0,0,0,0.10),0 20px 48px rgba(0,0,0,0.08)!important;transform:translateY(-2px)}`}</style>
       {/* Nav */}
       <header style={{
         position:   'sticky',

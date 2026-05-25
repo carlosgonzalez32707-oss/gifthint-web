@@ -154,11 +154,6 @@ export default function BookmarkletPage() {
             <a
               href={bookmarkletHref}
               draggable={true}
-              onClick={(e) => {
-                // Clicking (not dragging) on the install page itself is
-                // harmless but confusing — intercept and show a tip instead.
-                // The bookmarklet only runs when clicked from OTHER sites.
-              }}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',

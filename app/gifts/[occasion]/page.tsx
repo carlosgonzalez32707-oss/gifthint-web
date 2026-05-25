@@ -143,6 +143,9 @@ const globalCSS = `
   .card-hover { transition: transform 180ms ease, box-shadow 180ms ease; }
   .card-hover:hover { transform: translateY(-4px); box-shadow: ${c.shadowMd} !important; }
 
+  .gh-occasion-card { transition: box-shadow 180ms, transform 180ms; }
+  .gh-occasion-card:hover { box-shadow: var(--gh-hover-shadow, 0 4px 20px rgba(0,0,0,0.10)) !important; transform: translateY(-2px); }
+
   .faq-chevron { transition: transform 200ms ease; }
   details[open] .faq-chevron { transform: rotate(180deg); }
 
@@ -692,6 +695,7 @@ export default async function OccasionLandingPage({ params }: { params: { occasi
                   <a
                     key={list.id}
                     href={listHref}
+                    className="gh-occasion-card"
                     style={{
                       display:        'flex',
                       flexDirection:  'column',
@@ -702,16 +706,8 @@ export default async function OccasionLandingPage({ params }: { params: { occasi
                       borderRadius:   14,
                       textDecoration: 'none',
                       color:          'inherit',
-                      transition:     'box-shadow 180ms, transform 180ms',
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.boxShadow = `0 4px 20px ${hexAlpha(accent, 0.15)}`
-                      e.currentTarget.style.transform  = 'translateY(-2px)'
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.boxShadow = 'none'
-                      e.currentTarget.style.transform  = 'translateY(0)'
-                    }}
+                      '--gh-hover-shadow': `0 4px 20px ${hexAlpha(accent, 0.15)}`,
+                    } as React.CSSProperties}
                   >
                     {/* Avatar + name */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
