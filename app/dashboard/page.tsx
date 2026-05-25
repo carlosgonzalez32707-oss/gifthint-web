@@ -219,6 +219,26 @@ export default function DashboardPage() {
         </a>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <a
+            href="/dashboard/group-gifts"
+            style={{
+              fontSize:       '12px',
+              color:          tokens.colors.muted,
+              textDecoration: 'none',
+            }}
+          >
+            🎁 Group gifts
+          </a>
+          <a
+            href="/dashboard/referrals"
+            style={{
+              fontSize:       '12px',
+              color:          tokens.colors.muted,
+              textDecoration: 'none',
+            }}
+          >
+            🔗 Referrals
+          </a>
           {username && (
             <a
               href={`/list/${username}`}

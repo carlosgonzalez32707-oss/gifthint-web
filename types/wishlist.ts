@@ -82,6 +82,13 @@ export interface WishlistItem {
   dna_tags:         string[]
 
   // ── Claim state ─────────────────────────────────────────────────────────────
+  // ── Group gift ──────────────────────────────────────────────────────────────
+  /** True when the item is set up for group gifting (has an associated pool) */
+  is_group_gift?:      boolean
+  /** Denormalised target amount for quick display without joining gift_pools */
+  group_gift_target?:  number | null
+
+  // ── Claim state ─────────────────────────────────────────────────────────────
   /** True once a gifter confirms they are buying this item */
   is_claimed:       boolean
   /** Gifter's name if they chose to identify themselves; null if anonymous */
@@ -90,6 +97,20 @@ export interface WishlistItem {
   claimed_at:       string | null
   /** True if the gifter clicked "Stay anonymous" */
   claimed_anonymous: boolean
+
+  // ── Price tracking ───────────────────────────────────────────────────────────
+  /** When true, the daily price-check cron monitors this item */
+  price_alert_enabled?:     boolean
+  /**
+   * Alert threshold as a percentage of the previous price.
+   * 90 = alert when new price ≤ 90% of old price (i.e. ≥10% off).
+   * Defaults to 90 when null.
+   */
+  price_alert_threshold?:   number | null
+  /** ISO 8601 timestamp of the last price-check run */
+  last_checked_at?:         string | null
+  /** Historical lowest price seen for this item */
+  lowest_price?:            number | null
 
   // ── Display ordering ────────────────────────────────────────────────────────
   /** Manual sort position; items with equal sort_order fall back to created_at */

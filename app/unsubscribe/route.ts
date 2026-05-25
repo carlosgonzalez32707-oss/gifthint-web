@@ -72,7 +72,18 @@ const PAGE_STYLES = `
   a:hover { text-decoration: underline; }
 `
 
-function unsubscribedPage(): NextResponse {
+type UnsubscribeType = 'digest' | 'price_alerts'
+
+function unsubscribedPage(type: UnsubscribeType = 'digest'): NextResponse {
+  const isPriceAlerts = type === 'price_alerts'
+  const heading   = isPriceAlerts ? 'Price alert emails disabled' : 'You\'ve been unsubscribed'
+  const body      = isPriceAlerts
+    ? 'You won\'t receive any more price drop alerts from GiftHint. Your wishlist and gifter notifications are unaffected.'
+    : 'You won\'t receive any more weekly digest emails from GiftHint. Your wishlist is still active — gifters can still view and claim items.'
+  const reEnable  = isPriceAlerts
+    ? 'You can re-enable price alerts from your'
+    : 'Changed your mind? You can re-enable digest emails from your'
+
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -84,13 +95,10 @@ function unsubscribedPage(): NextResponse {
 <body>
   <div class="card">
     <p class="icon">✅</p>
-    <h1>You've been unsubscribed</h1>
+    <h1>${heading}</h1>
+    <p>${body}</p>
     <p>
-      You won't receive any more weekly digest emails from GiftHint.
-      Your wishlist is still active — gifters can still view and claim items.
-    </p>
-    <p>
-      Changed your mind? You can re-enable digest emails from your
+      ${reEnable}
       <a href="${process.env.NEXT_PUBLIC_APP_URL ?? 'https://gifthint.io'}/dashboard">account settings</a>.
     </p>
     <p style="font-size: 12px; color: #555450; margin-top: 24px; margin-bottom: 0;">
@@ -169,6 +177,9 @@ function errorPage(): NextResponse {
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const token = req.nextUrl.searchParams.get('token')
+  const typeParam = req.nextUrl.searchParams.get('type')
+  const unsubType: UnsubscribeType =
+    typeParam === 'price_alerts' ? 'price_alerts' : 'digest'
 
   if (!token || token.trim().length === 0) {
     return invalidTokenPage()
@@ -179,7 +190,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // ── Look up user by token ──────────────────────────────────────────────────
   const { data: user, error: lookupError } = await supabase
     .from('users')
-    .select('id, email_digest_enabled')
+    .select('id, email_digest_enabled, price_alerts_enabled')
     .eq('unsubscribe_token', token)
     .single()
 
@@ -188,33 +199,55 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return invalidTokenPage()
   }
 
-  const { id: userId } = user as { id: string; email_digest_enabled: boolean }
+  const { id: userId } = user as { id: string }
 
-  // ── Update: disable digest + rotate token ──────────────────────────────────
-  // We use a DB-generated UUID for the new token so there's no chance of a
-  // race condition where two requests get the same replacement token.
-  const { error: updateError } = await supabase.rpc('rotate_unsubscribe_token', {
-    p_user_id: userId,
-  })
+  // ── Determine which column to flip ────────────────────────────────────────
+  const optOutPatch =
+    unsubType === 'price_alerts'
+      ? { price_alerts_enabled: false }
+      : { email_digest_enabled: false }
 
-  if (updateError) {
-    // RPC doesn't exist yet or failed — fall back to a direct update
-    // (token rotation won't happen, but the opt-out still will)
-    const { error: fallbackError } = await supabase
+  // ── Update: disable the relevant email type + rotate token ────────────────
+  // rotate_unsubscribe_token RPC handles token rotation + the disable flag for
+  // digest emails. For price_alerts we need a direct update since the RPC only
+  // touches email_digest_enabled.
+  if (unsubType === 'price_alerts') {
+    const { error: updateError } = await supabase
       .from('users')
       .update({
-        email_digest_enabled: false,
-        unsubscribe_token:    crypto.randomUUID(),
+        ...optOutPatch,
+        unsubscribe_token: crypto.randomUUID(),
       })
       .eq('id', userId)
 
-    if (fallbackError) {
-      console.error('[unsubscribe] DB update failed:', fallbackError.message)
+    if (updateError) {
+      console.error('[unsubscribe] price_alerts update failed:', updateError.message)
       return errorPage()
+    }
+  } else {
+    // Digest — use existing RPC that rotates token atomically
+    const { error: updateError } = await supabase.rpc('rotate_unsubscribe_token', {
+      p_user_id: userId,
+    })
+
+    if (updateError) {
+      // RPC unavailable — fall back to direct update
+      const { error: fallbackError } = await supabase
+        .from('users')
+        .update({
+          email_digest_enabled: false,
+          unsubscribe_token:    crypto.randomUUID(),
+        })
+        .eq('id', userId)
+
+      if (fallbackError) {
+        console.error('[unsubscribe] DB update failed:', fallbackError.message)
+        return errorPage()
+      }
     }
   }
 
-  console.log(`[unsubscribe] User ${userId} opted out of digest emails.`)
+  console.log(`[unsubscribe] User ${userId} opted out of ${unsubType} emails.`)
 
-  return unsubscribedPage()
+  return unsubscribedPage(unsubType)
 }

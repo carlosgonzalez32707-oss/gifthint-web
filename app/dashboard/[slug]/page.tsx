@@ -44,17 +44,19 @@ import { BulkTagEditor }              from '@/components/dashboard/BulkTagEditor
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface Item {
-  id:          string
-  title:       string
-  hint:        string | null
-  price:       number | null
-  currency:    string
-  image_url:   string | null
-  source_url:  string
-  is_claimed:  boolean
-  sort_order:  number | null
-  dna_tags:    string[] | null
-  wishlist_id: string | null
+  id:                  string
+  title:               string
+  hint:                string | null
+  price:               number | null
+  currency:            string
+  image_url:           string | null
+  source_url:          string
+  is_claimed:          boolean
+  sort_order:          number | null
+  dna_tags:            string[] | null
+  wishlist_id:         string | null
+  is_group_gift?:      boolean
+  group_gift_target?:  number | null
 }
 
 interface Wishlist {
@@ -403,7 +405,7 @@ export default function ListDetailPage({
       // Fetch items belonging to this wishlist
       const { data: itemRows } = await supabase
         .from('wishlist_items')
-        .select('id, title, hint, price, currency, image_url, source_url, is_claimed, sort_order, dna_tags, wishlist_id')
+        .select('id, title, hint, price, currency, image_url, source_url, is_claimed, sort_order, dna_tags, wishlist_id, is_group_gift, group_gift_target')
         .eq('user_id', user!.id)
         .eq('wishlist_id', wl.id)
         .order('sort_order', { ascending: true, nullsFirst: false })
@@ -881,7 +883,7 @@ export default function ListDetailPage({
             >
               Install the{' '}
               <a
-                href="https://chrome.google.com/webstore"
+                href={process.env.NEXT_PUBLIC_CHROME_STORE_URL ?? 'https://chromewebstore.google.com/detail/gifthint/PLACEHOLDER'}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ color: theme.accent, textDecoration: 'underline' }}

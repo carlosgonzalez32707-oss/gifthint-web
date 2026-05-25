@@ -48,8 +48,8 @@
  *   Contact: associates-api@amazon.com with your Associates ID to apply.
  *
  * ENV VARS NEEDED:
- *   AMAZON_PA_ACCESS_KEY   — AWS IAM access key (same account as PA API)
- *   AMAZON_PA_SECRET_KEY   — AWS IAM secret key
+ *   AMAZON_ACCESS_KEY      — AWS IAM access key (shared with lib/price-checker.ts)
+ *   AMAZON_SECRET_KEY      — AWS IAM secret key (shared with lib/price-checker.ts)
  *   AMAZON_ASSOCIATES_TAG  — Your Associates tracking ID (e.g. gifthint-20)
  *   SUPABASE_URL           — Used to fetch CSVs from storage (already in .env)
  *   SUPABASE_SERVICE_ROLE_KEY — Already in .env
@@ -282,8 +282,8 @@ export async function fetchAssociatesReport(
  * This is used for PRODUCT SEARCH / LOOKUP, not for earnings reports.
  *
  * Required env vars:
- *   AMAZON_PA_ACCESS_KEY  — IAM access key ID
- *   AMAZON_PA_SECRET_KEY  — IAM secret access key
+ *   AMAZON_ACCESS_KEY     — IAM access key ID (shared with lib/price-checker.ts)
+ *   AMAZON_SECRET_KEY     — IAM secret access key (shared with lib/price-checker.ts)
  *   AMAZON_ASSOCIATES_TAG — Associates tracking ID
  *
  * Usage example (product lookup):
@@ -312,12 +312,12 @@ export async function signPaApiRequest({
   path?:    string
   payload:  string
 }): Promise<Record<string, string>> {
-  const accessKey = process.env.AMAZON_PA_ACCESS_KEY
-  const secretKey = process.env.AMAZON_PA_SECRET_KEY
+  const accessKey = process.env.AMAZON_ACCESS_KEY
+  const secretKey = process.env.AMAZON_SECRET_KEY
 
   if (!accessKey || !secretKey) {
     throw new Error(
-      '[amazon-associates] AMAZON_PA_ACCESS_KEY and AMAZON_PA_SECRET_KEY must be set. ' +
+      '[amazon-associates] AMAZON_ACCESS_KEY and AMAZON_SECRET_KEY must be set. ' +
       'Apply for PA API access at: Associates Central → Tools → Product Advertising API'
     )
   }

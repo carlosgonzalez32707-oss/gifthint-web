@@ -1,11 +1,15 @@
 /**
- * app/api/items/[username]/route.ts — GiftHint
+ * app/api/claimed-state/[username]/route.ts — GiftHint
  *
- * GET /api/items/:username
+ * GET /api/claimed-state/:username
  *
  * Returns the claimed state of every item on the named user's wishlist.
  * Used as a polling fallback by useRealtimeClaims when Supabase Realtime
  * is unavailable (WebSocket blocked, add-on not enabled, old browser).
+ *
+ * Previously at /api/items/:username — moved here because Next.js does not
+ * allow sibling dynamic segments with different names at the same path level
+ * ([id] and [username] cannot both exist under app/api/items/).
  *
  * Response shape (200):
  *   { items: Array<{ id, is_claimed, claimed_by, claimed_anonymous, claimed_at }> }
@@ -47,7 +51,7 @@ export async function GET(
     .maybeSingle()
 
   if (userError) {
-    console.error('[api/items] user lookup error:', userError.message)
+    console.error('[api/claimed-state] user lookup error:', userError.message)
     return NextResponse.json({ error: 'server_error' }, { status: 500 })
   }
 
@@ -64,7 +68,7 @@ export async function GET(
     .order('sort_order', { ascending: true })
 
   if (itemsError) {
-    console.error('[api/items] items query error:', itemsError.message)
+    console.error('[api/claimed-state] items query error:', itemsError.message)
     return NextResponse.json({ error: 'server_error' }, { status: 500 })
   }
 

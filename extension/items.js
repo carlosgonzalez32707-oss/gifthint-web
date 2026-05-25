@@ -165,6 +165,29 @@ export async function isDuplicate(sourceUrl, userId, token) {
   }
 }
 
+// ── getRecentItems ────────────────────────────────────────────────────────────
+
+/**
+ * Fetches the 5 most recently created items for a wishlist.
+ * Returns price + lowest_price so the popup can show price-change indicators.
+ *
+ * @param {string} wishlistId  — UUID of the active wishlist
+ * @param {string} token       — Supabase user access token
+ * @returns {{ items: Array, error: null } | { items: null, error: object }}
+ */
+export async function getRecentItems(wishlistId, token) {
+  const qs =
+    `wishlist_items` +
+    `?wishlist_id=eq.${encodeURIComponent(wishlistId)}` +
+    `&order=created_at.desc` +
+    `&limit=5` +
+    `&select=id,title,price,currency,image_url,lowest_price,source_url,affiliate_url,is_claimed`
+
+  const { data, error } = await supabaseGet(qs, token)
+  if (error) return { items: null, error }
+  return { items: Array.isArray(data) ? data : [], error: null }
+}
+
 // ── Internal helper (re-used in deleteItem above) ────────────────────────────
 
 async function supabaseFetch(path, { method, body, token }) {

@@ -12,7 +12,7 @@
  * Fallback:
  *   If the Realtime subscription fails (old browser, WebSocket blocked, Supabase
  *   Realtime add-on disabled), the hook falls back to polling
- *   GET /api/items/[username] every 30 seconds.
+ *   GET /api/claimed-state/[username] every 30 seconds.
  *
  * IMPORT RULE: 'use client' — never import from Server Components.
  */
@@ -142,7 +142,7 @@ export function useRealtimeClaims(
 
     async function poll() {
       try {
-        const res = await fetch(`/api/items/${publicUsername}`, { cache: 'no-store' })
+        const res = await fetch(`/api/claimed-state/${publicUsername}`, { cache: 'no-store' })
         if (!res.ok) return
 
         const { items } = (await res.json()) as {

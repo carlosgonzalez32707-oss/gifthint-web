@@ -25,13 +25,25 @@
  *   400  { error: 'missing_fields', missing: string[] }
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient }        from '@/lib/supabase-server'
+import { NextRequest, NextResponse }           from 'next/server'
+import { createServerClient }                  from '@/lib/supabase-server'
+import { rateLimit, getClientIp }              from '@/lib/rate-limit'
+import { detectClickFraud }                    from '@/lib/abuse-detection'
 
 // Valid affiliate network values — anything else is coerced to 'unknown'
 const VALID_NETWORKS = new Set(['amazon_associates', 'skimlinks', 'unknown'])
 
 export async function POST(req: NextRequest) {
+  // ── Rate limit: 100 clicks / IP / hour ────────────────────────────────────
+  // Checked BEFORE parsing the body so fraud bots exit cheaply.
+  // Returns { ok: true } silently (not 429) — don't telegraph the limit to bots.
+  const ip = getClientIp(req)
+  const rl = await rateLimit(`click:${ip}`, 100, 3_600)
+  if (!rl.success) {
+    // Silent drop — same response as a successful click so bots can't detect it
+    return NextResponse.json({ ok: true })
+  }
+
   // ── Parse ──────────────────────────────────────────────────────────────────
   let body: Record<string, unknown>
   try {
@@ -55,6 +67,11 @@ export async function POST(req: NextRequest) {
   const affiliateNetwork   = VALID_NETWORKS.has(String(body.affiliateNetwork))
     ? String(body.affiliateNetwork)
     : 'unknown'
+
+  // ── Abuse detection (non-blocking) ────────────────────────────────────────
+  // Same IP clicking same item > 3× / hour → flagged in suspicious_events.
+  // Does NOT block the request — logged for manual admin review only.
+  void detectClickFraud(itemId, ip)
 
   // ── Return immediately — insert is fire-and-forget ─────────────────────────
   // The client's keepalive fetch resolves here; the DB insert runs async.

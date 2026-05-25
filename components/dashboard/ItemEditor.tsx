@@ -39,21 +39,29 @@ import {
 } from 'react'
 import { tokens }        from '@/tokens'
 import { getBrowserClient } from '@/lib/supabase-browser'
-import { DnaTagEditor }  from '@/components/dashboard/DnaTagEditor'
+import { DnaTagEditor }        from '@/components/dashboard/DnaTagEditor'
+import { GroupGiftToggle }      from '@/components/dashboard/GroupGiftToggle'
+import { PriceAlertSettings }   from '@/components/dashboard/PriceAlertSettings'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 /** Minimal shape the editor needs from the item record. */
 export interface EditableItem {
-  id:         string
-  title:      string
-  hint:       string | null
-  price:      number | null
-  currency:   string
-  image_url:  string | null
-  source_url: string
-  dna_tags:   string[] | null
-  retailer?:  string | null
+  id:                  string
+  title:               string
+  hint:                string | null
+  price:               number | null
+  currency:            string
+  image_url:           string | null
+  source_url:          string
+  dna_tags:            string[] | null
+  retailer?:           string | null
+  is_group_gift?:         boolean
+  group_gift_target?:     number | null
+  price_alert_enabled?:   boolean
+  price_alert_threshold?: number | null
+  last_checked_at?:       string | null
+  lowest_price?:          number | null
 }
 
 interface ItemEditorProps {
@@ -468,6 +476,36 @@ export function ItemEditor({
           <p style={{ margin: '4px 0 0', fontSize: '10.5px', color: tokens.colors.muted, opacity: 0.6 }}>
             Paste a direct image URL to replace the scraped thumbnail.
           </p>
+        </div>
+
+        {/* ── Group gift toggle ───────────────────────────────────────────── */}
+        <div style={{ marginBottom: '20px' }}>
+          <GroupGiftToggle
+            item={{
+              id:                 item.id,
+              price:              item.price,
+              currency:           item.currency,
+              is_group_gift:      item.is_group_gift,
+              group_gift_target:  item.group_gift_target,
+            }}
+            accent={accent}
+            onSaved={(patch) => {
+              onSaved({ ...item, ...patch })
+            }}
+          />
+        </div>
+
+        {/* ── Price alert settings ────────────────────────────────────────── */}
+        <div style={{ marginBottom: '20px' }}>
+          <PriceAlertSettings
+            itemId={item.id}
+            initialEnabled={item.price_alert_enabled ?? true}
+            initialThreshold={item.price_alert_threshold ?? 90}
+            lastCheckedAt={item.last_checked_at ?? null}
+            lowestPrice={item.lowest_price ?? null}
+            currency={item.currency}
+            accent={accent}
+          />
         </div>
 
         {/* ── Error banner ────────────────────────────────────────────────── */}

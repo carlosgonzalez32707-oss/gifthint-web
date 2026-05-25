@@ -19,7 +19,7 @@
   ],
 
   "oauth2": {
-    "client_id": "YOUR_OAUTH_CLIENT_ID.apps.googleusercontent.com",
+    "client_id": "987313469607-sngektdhq0k17ghcl7ggtsi7k2q19uel.apps.googleusercontent.com",
     "scopes": ["email", "profile"]
   },
 
@@ -39,6 +39,11 @@
     "32":  "icons/icon-32.png",
     "48":  "icons/icon-48.png",
     "128": "icons/icon-128.png"
+  },
+
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
   },
 
   "content_scripts": [

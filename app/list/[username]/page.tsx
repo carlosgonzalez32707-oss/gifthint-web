@@ -46,6 +46,8 @@ export type WishItem = Pick<DbWishlistItem,
   | 'retailer'
   | 'hint'
   | 'dna_tags'
+  | 'is_group_gift'
+  | 'group_gift_target'
   | 'is_claimed'
   | 'claimed_by'
   | 'claimed_at'

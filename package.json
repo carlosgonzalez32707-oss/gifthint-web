@@ -17,14 +17,22 @@
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
     "@react-email/components": "^1.0.12",
+    "@sentry/nextjs": "^10.53.1",
+    "@stripe/react-stripe-js": "^6.3.0",
+    "@stripe/stripe-js": "^9.5.0",
     "@supabase/supabase-js": "2.74.0",
     "@types/recharts": "^1.8.29",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.0",
+    "gray-matter": "^4.0.3",
     "next": "14.2.3",
+    "next-mdx-remote": "^6.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-email": "^6.1.4",
     "recharts": "^3.8.1",
-    "resend": "^3.5.0"
+    "resend": "^3.5.0",
+    "stripe": "^22.1.1"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

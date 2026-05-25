@@ -27,8 +27,10 @@
  *   a fresh reminder can go out for the new date.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient }        from '@/lib/supabase-server'
+import { NextRequest, NextResponse }  from 'next/server'
+import { createServerClient }         from '@/lib/supabase-server'
+import { rateLimit, getClientIp }     from '@/lib/rate-limit'
+import { detectEmailHarvest }         from '@/lib/abuse-detection'
 
 // ── Email validation ───────────────────────────────────────────────────────────
 // RFC-5321 minimal check — rejects obvious non-emails without over-engineering.
@@ -52,6 +54,19 @@ function isValidFutureDate(dateStr: string): boolean {
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  // ── Rate limit: 5 signups / IP / hour ────────────────────────────────────
+  const ip = getClientIp(req)
+  const rl = await rateLimit(`reminder:${ip}`, 5, 3_600)
+  if (!rl.success) {
+    return NextResponse.json(
+      { error: 'rate_limited', message: 'Too many requests. Please try again later.' },
+      { status: 429, headers: { 'Retry-After': String(Math.max(1, Math.ceil((rl.reset - Date.now()) / 1000))) } },
+    )
+  }
+
+  // ── Abuse detection (non-blocking) ────────────────────────────────────────
+  void detectEmailHarvest(ip)
+
   // ── Parse body ───────────────────────────────────────────────────────────────
   let body: { wisherUsername?: unknown; gifterEmail?: unknown; occasionDate?: unknown }
   try {

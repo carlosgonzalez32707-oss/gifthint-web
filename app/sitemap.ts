@@ -6,10 +6,15 @@
  *
  * Included routes:
  *   / (landing page)                priority 1.0, weekly
- *   /list/[username]/[slug]         priority 0.8, daily — all public wishlists
+ *   /gifts                          priority 0.9, monthly
+ *   /gifts/[occasion]               priority 0.9, monthly — 7 occasion pages
+ *   /blog/[slug]                    priority 0.7, monthly — published posts
+ *   /list/[username]/[slug]         priority 0.8, daily   — all public wishlists
  *
  * Excluded routes:
- *   /admin, /dashboard, /api — not indexable; also blocked in robots.ts
+ *   /admin, /dashboard, /api        not indexable; blocked in robots.ts
+ *   /partners/[slug]                robots: noindex — UTM-style landing pages
+ *   /r/[code]                       redirect-only handlers, no content
  *
  * Supabase query: joins wishlists → users so we can build the full URL path.
  * Only public wishlists with a non-null public_username are included.
@@ -17,6 +22,8 @@
 
 import type { MetadataRoute } from 'next'
 import { createServerClient } from '@/lib/supabase-server'
+import { OCCASION_SLUGS }     from '@/lib/occasion-seo'
+import { getAllPosts }         from '@/lib/blog'
 
 export const revalidate = 3600 // regenerate sitemap every hour
 
@@ -24,12 +31,38 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://gifthint.io'
 
   // ── Static routes ─────────────────────────────────────────────────────────
+  const occasionRoutes: MetadataRoute.Sitemap = [
+    // Gift hub
+    {
+      url:             `${siteUrl}/gifts`,
+      changeFrequency: 'monthly',
+      priority:        0.9,
+    },
+    // Per-occasion landing pages
+    ...OCCASION_SLUGS.map((slug) => ({
+      url:             `${siteUrl}/gifts/${slug}`,
+      changeFrequency: 'monthly' as const,
+      priority:        0.9,
+    })),
+  ]
+
+  // ── Blog posts ────────────────────────────────────────────────────────────
+  // getAllPosts() reads from the filesystem — no DB call needed.
+  const blogRoutes: MetadataRoute.Sitemap = getAllPosts().map((post) => ({
+    url:             `${siteUrl}/blog/${post.slug}`,
+    lastModified:    new Date(post.date),
+    changeFrequency: 'monthly' as const,
+    priority:        0.7,
+  }))
+
   const staticRoutes: MetadataRoute.Sitemap = [
     {
       url:             `${siteUrl}/`,
       changeFrequency: 'weekly',
       priority:        1.0,
     },
+    ...occasionRoutes,
+    ...blogRoutes,
   ]
 
   // ── Dynamic gifter pages ──────────────────────────────────────────────────

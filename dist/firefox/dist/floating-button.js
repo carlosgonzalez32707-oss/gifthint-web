@@ -1,5 +1,5 @@
 (() => {
-  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.iU2yKg31WA/supabase.js
+  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.9tNOZ7p1Qo/supabase.js
   var SUPABASE_URL = "https://pxegvviakrjhldtwtobi.supabase.co";
   var SUPABASE_ANON_KEY = "<YOUR_ANON_KEY>";
   var TIMEOUT_MS = 8e3;
@@ -44,7 +44,7 @@
     return supabaseFetch(path, { method: "POST", body, token });
   }
 
-  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.iU2yKg31WA/wishlists.js
+  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.9tNOZ7p1Qo/wishlists.js
   var OCCASION_LABELS = {
     birthday: { label: "Birthday", emoji: "\u{1F382}" },
     christmas: { label: "Christmas", emoji: "\u{1F384}" },
@@ -96,7 +96,7 @@
     }
   }
 
-  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.iU2yKg31WA/floating-button.js
+  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.9tNOZ7p1Qo/floating-button.js
   var USER_STORAGE_KEY = "gh_user";
   var SITE_URL = "https://gifthint.io";
   var BUTTON_ID = "gifthint-float-btn";

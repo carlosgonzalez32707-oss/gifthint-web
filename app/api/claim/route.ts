@@ -28,6 +28,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient }        from '@/lib/supabase-server'
+import { rateLimit, getClientIp }  from '@/lib/rate-limit'
+import { detectClaimSpam }           from '@/lib/abuse-detection'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -66,6 +68,19 @@ async function broadcastClaim(
 }
 
 export async function POST(req: NextRequest) {
+  // ── Rate limit: 20 claims / IP / hour ─────────────────────────────────────
+  const ip = getClientIp(req)
+  const rl = await rateLimit(`claim:${ip}`, 20, 3_600)
+  if (!rl.success) {
+    return NextResponse.json(
+      { error: 'rate_limited', message: 'Too many requests. Please try again later.' },
+      { status: 429, headers: { 'Retry-After': String(Math.max(1, Math.ceil((rl.reset - Date.now()) / 1000))) } },
+    )
+  }
+
+  // ── Abuse detection (non-blocking) ────────────────────────────────────────
+  void detectClaimSpam(ip)
+
   // ── Parse body ──────────────────────────────────────────────────────────────
   let body: { itemId?: unknown; claimedBy?: unknown; anonymous?: unknown }
   try {

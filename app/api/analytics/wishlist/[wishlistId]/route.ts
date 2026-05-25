@@ -26,6 +26,14 @@
  *   403  { error: 'forbidden' }
  *   404  { error: 'not_found' }
  *   500  { error: 'server_error', message: string }
+ *
+ * N+1 fix (20260518_db_optimisation.sql)
+ * ──────────────────────────────────────
+ * Previously this route fetched wishlist_items then separately fetched
+ * click_events and counted client-side — two sequential queries after the
+ * initial Promise.all. The get_items_with_click_counts() RPC collapses both
+ * into a single LEFT JOIN aggregate executed inside Postgres, running in
+ * parallel with the other two fetches.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -51,6 +59,15 @@ interface TopItem {
   title:      string
   buy_clicks: number
   is_claimed: boolean
+}
+
+/** Shape returned by the get_items_with_click_counts() Postgres RPC. */
+interface ItemWithClicks {
+  id:         string
+  title:      string
+  is_claimed: boolean
+  buy_clicks: number    // BIGINT from Postgres — cast to Number on use
+  sort_order: number
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -109,7 +126,12 @@ export async function GET(
   }
 
   // ── Parallel data fetch ─────────────────────────────────────────────────────
-  const [summaryResult, sparklineResult, topItemsResult] = await Promise.all([
+  //
+  // All three queries run concurrently. The third query uses the
+  // get_items_with_click_counts() RPC (added in 20260518_db_optimisation.sql)
+  // which executes a single LEFT JOIN aggregate inside Postgres — eliminating
+  // the previous two-step pattern (items SELECT → click_events SELECT → count).
+  const [summaryResult, sparklineResult, itemsWithClicksResult] = await Promise.all([
 
     // ① Summary from the wisher_analytics view
     supabase
@@ -126,12 +148,10 @@ export async function GET(
       p_days:        14,
     }),
 
-    // ③ Per-item breakdown: title, click count, claimed status
-    supabase
-      .from('wishlist_items')
-      .select('id, title, is_claimed')
-      .eq('wishlist_id', wishlistId)
-      .order('sort_order', { ascending: true }),
+    // ③ Items + click counts in a single SQL round-trip (replaces N+1 pattern)
+    supabase.rpc('get_items_with_click_counts', {
+      p_wishlist_id: wishlistId,
+    }),
   ])
 
   if (summaryResult.error) {
@@ -142,32 +162,22 @@ export async function GET(
     )
   }
 
-  // ── Build top-items list (join click counts client-side to avoid raw SQL) ───
-  // Fetch click counts for all items in this wishlist in one query.
-  const itemIds = (topItemsResult.data ?? []).map((i: { id: string }) => i.id)
-
-  let clicksByItem: Record<string, number> = {}
-
-  if (itemIds.length > 0) {
-    const { data: clickRows } = await supabase
-      .from('click_events')
-      .select('item_id')
-      .in('item_id', itemIds)
-
-    for (const row of clickRows ?? []) {
-      clicksByItem[row.item_id] = (clicksByItem[row.item_id] ?? 0) + 1
-    }
+  if (itemsWithClicksResult.error) {
+    console.error('[analytics] items-with-clicks error:', itemsWithClicksResult.error.message)
+    return NextResponse.json(
+      { error: 'server_error', message: itemsWithClicksResult.error.message },
+      { status: 500 },
+    )
   }
 
-  const topItems: TopItem[] = ((topItemsResult.data ?? []) as Array<{
-    id:         string
-    title:      string
-    is_claimed: boolean
-  }>)
+  // ── Build top-items list ────────────────────────────────────────────────────
+  // The RPC already returns items ordered by sort_order; we re-sort here by
+  // buy_clicks descending for the "most clicked" ranking.
+  const topItems: TopItem[] = ((itemsWithClicksResult.data ?? []) as ItemWithClicks[])
     .map((item) => ({
       id:         item.id,
       title:      item.title,
-      buy_clicks: clicksByItem[item.id] ?? 0,
+      buy_clicks: Number(item.buy_clicks),   // Postgres BIGINT → JS number
       is_claimed: item.is_claimed,
     }))
     .sort((a, b) => b.buy_clicks - a.buy_clicks)

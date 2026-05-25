@@ -1,0 +1,677 @@
+You are starting a new Claude Code session for GiftHint Phase 4.
+
+Read this entire prompt before taking any action. Do not ask clarifying questions — all context is below. Start with the first action at the end of this prompt.
+
+═══════════════════════════════════════════════════════════════════════════════
+GIFTHINT — PHASE 4 KICKOFF
+═══════════════════════════════════════════════════════════════════════════════
+
+WHAT GIFTHINT IS
+────────────────
+GiftHint is a universal gift wishlist platform. Wishers save products from any
+retailer (browser extension, bookmarklet, iOS share sheet). Gifters visit the
+wisher's page, claim items, and chip into group gifts — without duplicating
+purchases or spoiling surprises. Revenue comes from affiliate commissions
+(Amazon Associates + Skimlinks), group gift platform fees (Stripe), and a
+Pro subscription (£4.99/month or £47.88/year, Stripe Billing).
+
+PRODUCTION URL:       https://gifthint.io
+SUPABASE PROJECT REF: pxegvviakrjhldtwtobi
+STRIPE DASHBOARD:     https://dashboard.stripe.com
+VERCEL PROJECT:       gifthint-web
+
+───────────────────────────────────────────────────────────────────────────────
+TECH STACK
+───────────────────────────────────────────────────────────────────────────────
+
+Web app (existing)
+  Next.js 14.2 (App Router, RSC, Edge middleware)
+  Supabase 2.74 (Postgres + Auth + Realtime + RLS)
+  Stripe 22 (group gifting PaymentIntent + Pro subscription Billing)
+  Resend (transactional email)
+  Upstash Redis (@upstash/ratelimit + @upstash/redis)
+  Sentry (@sentry/nextjs)
+  Recharts (admin dashboards)
+  Skimlinks (gifter-page affiliate script)
+  Amazon Associates (server-side URL rewriting via lib/affiliate.ts)
+
+Browser extensions (existing)
+  Chrome MV3  — extension/manifest.json
+  Firefox MV2 — extension/manifest.firefox.json
+  Edge MV3    — extension/manifest.edge.json
+  Build: npm run build:chrome / build:firefox / build:edge / build:ext
+
+Mobile app (Phase 4 — to be built)
+  React Native + Expo SDK 52 (Managed Workflow)
+  Expo Router 4
+  Expo AuthSession (Google OAuth)
+  Expo Notifications (push)
+  EAS Build
+  Supabase JS client with AsyncStorage (no cookies in React Native)
+  Stripe Payment Sheet (Apple Pay / Google Pay)
+  expo-share-intent (iOS Share Extension)
+
+Monorepo (Phase 4 — to be set up)
+  pnpm workspaces + Turborepo
+  apps/web/    → existing Next.js app
+  apps/mobile/ → new Expo app
+  packages/shared/ → @gifthint/shared (pure-function modules)
+
+Language: TypeScript throughout.
+
+───────────────────────────────────────────────────────────────────────────────
+COMPLETE DATABASE SCHEMA (as of Phase 3)
+───────────────────────────────────────────────────────────────────────────────
+
+TABLE: users
+  id                       uuid PRIMARY KEY (= Supabase Auth UID)
+  email                    text NOT NULL UNIQUE
+  username                 text UNIQUE  -- custom username (Pro/referral gated)
+  display_name             text
+  avatar_url               text
+  created_at               timestamptz DEFAULT now()
+  -- Phase 2+
+  price_alerts_enabled     boolean NOT NULL DEFAULT true
+  -- Phase 3 — Stripe billing
+  stripe_customer_id       text UNIQUE
+  subscription_status      text DEFAULT 'free'   -- free | pro | cancelled
+  subscription_period_end  timestamptz
+  -- Phase 3 — Referral
+  referral_code            text NOT NULL UNIQUE   -- auto-generated 8-char
+  referred_by              uuid REFERENCES users(id) ON DELETE SET NULL
+  referral_count           int NOT NULL DEFAULT 0
+  -- Phase 3 — Referral rewards
+  premium_tier             text NOT NULL DEFAULT 'free'  -- free | plus | pro
+  custom_username_enabled  boolean NOT NULL DEFAULT false
+  premium_themes_enabled   boolean NOT NULL DEFAULT false
+  priority_support_enabled boolean NOT NULL DEFAULT false
+
+TABLE: wishlists
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid()
+  user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE
+  name        text NOT NULL
+  slug        text NOT NULL
+  occasion    text  -- birthday | wedding | christmas | baby_shower | etc.
+  is_public   boolean NOT NULL DEFAULT true
+  theme       text NOT NULL DEFAULT 'default'  -- default | midnight | cloud | forest | rose | slate
+  created_at  timestamptz DEFAULT now()
+  UNIQUE (user_id, slug)
+
+TABLE: wishlist_items
+  id                   uuid PRIMARY KEY DEFAULT gen_random_uuid()
+  wishlist_id          uuid NOT NULL REFERENCES wishlists(id) ON DELETE CASCADE
+  user_id              uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE
+  title                text NOT NULL
+  source_url           text NOT NULL  -- original URL (never rewritten)
+  affiliate_url        text           -- server-rewritten URL (Amazon Associates / Skimlinks)
+  image_url            text
+  price                numeric(10,2)
+  currency             text DEFAULT 'GBP'
+  retailer             text
+  notes                text
+  is_claimed           boolean NOT NULL DEFAULT false
+  claimed_at           timestamptz
+  claimed_by_session_id text
+  sort_order           int NOT NULL DEFAULT 0
+  dna_tags             text[]         -- array of DNA occasion tags
+  -- Phase 3 — Group gifting
+  is_group_gift        boolean NOT NULL DEFAULT false
+  group_gift_target    numeric(10,2)
+  -- Phase 3 — Price alerts
+  price_alert_enabled  boolean NOT NULL DEFAULT true
+  price_alert_threshold numeric(5,2) DEFAULT 90  -- alert when price < saved * threshold/100
+  last_checked_at      timestamptz
+  lowest_price         numeric(10,2)
+  created_at           timestamptz DEFAULT now()
+
+TABLE: gift_pools
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid()
+  item_id             uuid NOT NULL REFERENCES wishlist_items(id) ON DELETE CASCADE
+  target_amount       numeric(10,2) NOT NULL
+  collected_amount    numeric(10,2) NOT NULL DEFAULT 0
+  status              text DEFAULT 'open'  -- open | funded | purchased | cancelled
+  organiser_name      text NOT NULL
+  organiser_email     text NOT NULL
+  payout_instructions text
+  funded_at           timestamptz
+  stripe_transfer_id  text
+  created_at          timestamptz DEFAULT now()
+  -- DB trigger trg_gift_pool_collect auto-credits collected_amount on contribution success
+
+TABLE: gift_contributions
+  id                       uuid PRIMARY KEY DEFAULT gen_random_uuid()
+  pool_id                  uuid NOT NULL REFERENCES gift_pools(id) ON DELETE CASCADE
+  contributor_name         text
+  contributor_email        text
+  amount                   numeric(10,2) NOT NULL
+  stripe_payment_intent_id text UNIQUE
+  stripe_payment_status    text DEFAULT 'pending'  -- pending | succeeded | failed
+  anonymous                boolean DEFAULT false
+  contributed_at           timestamptz DEFAULT now()
+
+TABLE: price_history
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid()
+  item_id     uuid NOT NULL REFERENCES wishlist_items(id) ON DELETE CASCADE
+  price       numeric(10,2) NOT NULL
+  checked_at  timestamptz DEFAULT now()
+  source      text DEFAULT 'scrape'  -- scrape | api
+
+TABLE: price_drop_alerts
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid()
+  item_id        uuid REFERENCES wishlist_items(id) ON DELETE CASCADE
+  user_id        uuid REFERENCES users(id) ON DELETE CASCADE
+  old_price      numeric(10,2)
+  new_price      numeric(10,2)
+  drop_pct       numeric(5,2)
+  alert_sent_at  timestamptz DEFAULT now()
+  email_opened   boolean DEFAULT false
+  -- Partial unique index prevents re-alert within 7 days
+
+TABLE: referral_events
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid()
+  referrer_id   uuid REFERENCES users(id) ON DELETE SET NULL
+  referee_id    uuid REFERENCES users(id) ON DELETE SET NULL
+  event_type    text  -- click | signup | first_save
+  referral_code text NOT NULL
+  metadata      jsonb DEFAULT '{}'
+  created_at    timestamptz DEFAULT now()
+
+TABLE: click_events
+  id                        uuid PRIMARY KEY DEFAULT gen_random_uuid()
+  item_id                   uuid REFERENCES wishlist_items(id) ON DELETE SET NULL
+  wisher_user_id            uuid REFERENCES users(id) ON DELETE SET NULL
+  session_id                text
+  retailer                  text
+  affiliate_network         text  -- amazon | skimlinks | none
+  estimated_commission_pence int
+  clicked_at                timestamptz DEFAULT now()
+  ip_hash                   text
+  metadata                  jsonb DEFAULT '{}'
+
+TABLE: partners
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid()
+  user_id        uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT
+  slug           text NOT NULL UNIQUE
+  name           text NOT NULL
+  category       text  -- wedding | baby_shower | corporate | sports_club | education | other
+  referral_code  text NOT NULL
+  tagline        text
+  created_at     timestamptz DEFAULT now()
+
+TABLE: suspicious_events
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid()
+  event_type   text  -- click_fraud | fake_views | claim_spam | email_harvest
+  ip_address   text NOT NULL
+  metadata     jsonb DEFAULT '{}'
+  created_at   timestamptz DEFAULT now()
+  reviewed     boolean DEFAULT false
+
+TABLE: blocked_ips
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid()
+  ip_address text NOT NULL UNIQUE
+  reason     text
+  blocked_at timestamptz DEFAULT now()
+
+KEY VIEWS
+  growth_metrics          — weekly signups by channel, cohort retention, viral K, WAW, D30
+  partner_commission_summary — per-partner referral count and estimated payout
+
+───────────────────────────────────────────────────────────────────────────────
+CURRENT API SURFACE (all routes under /api/*)
+───────────────────────────────────────────────────────────────────────────────
+
+SAVE / ITEMS
+  GET    /api/items/[username]        — fetch wishlist items (polling)
+  POST   /api/items                   — save new item (auth required)
+  PATCH  /api/items/[itemId]          — update item (auth required)
+  DELETE /api/items/[itemId]          — delete item (auth required)
+
+WISHLISTS
+  GET    /api/wishlists               — list user's wishlists
+  POST   /api/wishlists               — create wishlist
+  PATCH  /api/wishlists/[id]          — update wishlist (name, theme, etc.)
+  DELETE /api/wishlists/[id]          — delete wishlist
+
+CLAIM / GIFTER
+  POST   /api/claim/[itemId]          — claim item (no auth; session-based)
+  DELETE /api/claim/[itemId]          — unclaim item
+  GET    /api/claimed-state/[username] — batch claimed state (CDN-cached)
+
+GROUP GIFTING
+  POST   /api/group-gift/contribute   — create Stripe PaymentIntent
+  POST   /api/group-gift/webhook      — Stripe event handler (STRIPE_WEBHOOK_SECRET)
+  POST   /api/group-gift/refund       — admin refund (ADMIN_REFUND_SECRET)
+
+BILLING
+  POST   /api/billing/create-checkout — create Stripe Checkout Session
+  POST   /api/billing/webhook         — Stripe billing events (STRIPE_BILLING_WEBHOOK_SECRET)
+  POST   /api/billing/cancel          — cancel Pro subscription at period end
+
+AUTH
+  POST   /api/auth/exchange           — Google OAuth PKCE exchange (extension only)
+  PATCH  /api/username                — update custom username (Pro/referral gated)
+
+ANALYTICS / TRACKING
+  POST   /api/track-click             — log buy click (fire-and-forget; rate-limited)
+  POST   /api/track-view              — log page view (coarse; rate-limited)
+  GET    /api/analytics/wishlist/[id] — wisher analytics (auth required)
+  GET    /api/affiliate-report        — admin affiliate reconciliation
+
+UTILITIES
+  GET    /api/scrape-og               — OG scrape for a given URL
+  GET    /api/price-history           — price trend for item detail modal
+  POST   /api/reminder-signup         — reminder email opt-in
+
+ADMIN
+  GET    /api/admin/*                 — admin panel endpoints (ADMIN_SECRET)
+  GET    /api/partners                — partner CRUD
+  GET    /api/og                      — dynamic OG image (Edge runtime)
+
+CRON (Vercel Cron, Bearer CRON_SECRET)
+  POST   /api/cron/send-reminders     — daily 09:00 UTC
+  POST   /api/cron/send-digest        — weekly Monday 08:00 UTC
+  POST   /api/cron/sync-affiliate-data — daily 06:00 UTC
+  POST   /api/cron/check-prices       — daily 02:00 UTC
+
+RESERVED FOR MOBILE (Phase 4 — not yet created)
+  POST   /api/v1/save                 — mobile save (Share Extension entry point)
+  POST   /api/v1/push-tokens          — register Expo push token
+
+───────────────────────────────────────────────────────────────────────────────
+ACTIVE INTEGRATIONS
+───────────────────────────────────────────────────────────────────────────────
+
+Stripe
+  Group gifting:   STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET
+                   Endpoint: https://gifthint.io/api/group-gift/webhook
+                   Events: payment_intent.succeeded, payment_intent.payment_failed
+
+  Pro billing:     STRIPE_PRO_MONTHLY_PRICE_ID (price_monthly_xxx — £4.99/month)
+                   STRIPE_PRO_ANNUAL_PRICE_ID  (price_annual_xxx  — £47.88/year)
+                   STRIPE_BILLING_WEBHOOK_SECRET (separate from group-gift)
+                   Endpoint: https://gifthint.io/api/billing/webhook
+                   Events: checkout.session.completed, customer.subscription.updated,
+                           customer.subscription.deleted, invoice.payment_failed
+
+Amazon Associates
+  Tag: gifthint-20 (US)
+  Server-side only — AMAZON_ASSOCIATES_TAG / AMAZON_ACCESS_KEY / AMAZON_SECRET_KEY
+  lib/affiliate.ts — NEVER import in client bundle, extension, or mobile app
+  Commission rates: 10% Luxury Beauty; 6% Headphones/Instruments; 4.5% Books/Kitchen;
+                    4% Fashion/Jewellery; 3% Home/Baby/Pets/Toys; 1% Electronics/Health
+
+Skimlinks
+  Publisher ID: NEXT_PUBLIC_SKIMLINKS_PUBLISHER_ID / SKIMLINKS_PUBLISHER_ID
+  API key:      SKIMLINKS_API_KEY (commission reporting)
+  Script loads on gifter page (not extension, not mobile)
+
+Resend (transactional email)
+  RESEND_API_KEY — set RESEND_TEST_MODE=true in development
+  Templates: weekly digest, price drop alert, group gift notification,
+             reminder email, dunning (invoice.payment_failed)
+
+Upstash Redis
+  UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN
+  Sliding-window rate limiting (lib/rate-limit.ts)
+  Global edge middleware blocklist (middleware.ts)
+  Fail-open: if Redis unreachable, all checks pass
+
+Sentry
+  NEXT_PUBLIC_SENTRY_DSN / SENTRY_DSN / SENTRY_ORG / SENTRY_PROJECT / SENTRY_AUTH_TOKEN
+  PII scrubbing via beforeSend hook
+  4 custom alert rules — see docs/sentry-setup.md
+
+Google OAuth (extension only)
+  GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
+  /api/auth/exchange — PKCE server-side exchange for extension
+  Mobile uses Expo AuthSession + supabase.auth.signInWithOAuth() directly
+
+───────────────────────────────────────────────────────────────────────────────
+WHAT WAS BUILT IN PHASES 1–3
+───────────────────────────────────────────────────────────────────────────────
+
+Phase 1 (Months 1–2):
+  Core wishlist (save, list, share), Chrome extension (MV3, Google OAuth via PKCE),
+  Supabase Auth + RLS, gifter page with claim sync (Supabase Realtime),
+  Resend transactional email, weekly digest, basic admin dashboard
+
+Phase 2 (Month 3):
+  Amazon Associates affiliate rewriting (server-only, lib/affiliate.ts),
+  Skimlinks publisher script on gifter page, affiliate admin dashboard (Recharts),
+  daily cron for affiliate data sync, real-time claim sync, DNA tag analytics,
+  cross-browser extension QA, performance budget (LCP < 2.5s, INP < 200ms),
+  beta launch campaign, ProductHunt teaser
+
+Phase 3 (Months 4–6):
+  Bookmarklet (lib/bookmarklet-minifier.ts, /app/bookmarklet),
+  iOS share flow (/app/save, app/save/SaveUI.tsx),
+  Firefox + Edge extensions (manifest.firefox.json, manifest.edge.json, auth.firefox.js),
+  Group gifting (gift_pools, gift_contributions, Stripe PaymentIntent, DB trigger),
+  Price drop alerts (price_history, price_drop_alerts, PA API, Resend),
+  SEO landing pages (/gifts, /gifts/[occasion], sitemap.ts, JSON-LD),
+  Blog (MDX, gray-matter, next-mdx-remote, /app/blog),
+  Referral program (referral_events, /r/[code], lib/referral.ts, lib/rewards.ts),
+  Dynamic OG images (/api/og, @vercel/og),
+  ProductHunt launch (producthunt-launch-package.md),
+  Partnership program (partners table, /partners/[slug], partner outreach),
+  Growth metrics dashboard (growth_metrics view, /admin/growth),
+  DB optimisation (8 indices, get_items_with_click_counts RPC),
+  Upstash rate limiting (middleware.ts, lib/rate-limit.ts, lib/abuse-detection.ts),
+  Sentry error monitoring (@sentry/nextjs, 4 custom alerts),
+  Pro subscription (Stripe Billing, lib/permissions.ts, /api/billing/*),
+  5 premium themes (lib/themes.ts, ThemeSelector, ThemeProvider, wishlists.theme),
+  Retailer partnerships (partners table, /partners/[slug], commission tracking),
+  API standardisation (lib/api-response.ts, lib/validators.ts, app/startup-check.ts)
+
+───────────────────────────────────────────────────────────────────────────────
+PHASE 4 OBJECTIVES
+───────────────────────────────────────────────────────────────────────────────
+
+1. REACT NATIVE MOBILE APP
+   iOS-first (App Store submission target: end of Phase 4)
+   Android alongside (Play Store submission: Phase 5 or concurrent)
+
+   Core MVP features — Wisher:
+     • Share Extension: save from any app via iOS share sheet (expo-share-intent)
+       → calls POST /api/v1/save (new endpoint wrapping lib/scrape-og.ts + lib/affiliate.ts)
+     • Wishlist management: create, reorder, delete wishlists and items
+     • Push notifications: price drop alerts + group gift milestones (Expo Notifications)
+     • Native sharing: share wishlist link via iOS share sheet
+     • Group gift: enable group gifting on an item, see pool progress
+
+   Core MVP features — Gifter:
+     • Browse wisher's list (same data as web, same /api/* endpoints)
+     • Claim items (POST /api/claim/[itemId] — no auth required)
+     • Apple Pay / Google Pay via Stripe Payment Sheet (same clientSecret from
+       POST /api/group-gift/contribute as the web app)
+
+   Auth:
+     • Google OAuth via Expo AuthSession (NOT chrome.identity)
+     • supabase.auth.signInWithOAuth({ provider: 'google' })
+       + WebBrowser.openAuthSessionAsync()
+     • Session stored in AsyncStorage (no cookie jar in React Native)
+     • detectSessionInUrl: false (MUST be set for React Native)
+
+   Push tokens:
+     • POST /api/v1/push-tokens { token: ExponentPushToken[...], platform: 'ios' | 'android' }
+     • New column: users.expo_push_token TEXT
+     • lib/push.ts (server-only): sendPushNotification(userId, title, body, data)
+       → calls https://exp.host/--/api/v2/push/send
+
+2. AI GIFT SUGGESTIONS
+   On the gifter page: "Not sure what to get? Let AI suggest gifts for [wisher's name]"
+   Input: wisher's DNA tags, existing wishlist item categories, occasion
+   Output: 3–5 gift idea suggestions with Amazon/retailer search deep-links
+   Model: Claude claude-haiku-4-5 (cost-efficient for high-volume gifter page calls)
+   Endpoint: POST /api/ai/suggestions { wishlistId, occasion, budget? }
+   Rate-limited: 3 requests per IP per hour (Upstash)
+   No PII sent to model: only tags, categories, occasion, and budget range
+
+3. AI-POWERED RETAILER RECOMMENDATIONS
+   On the wisher save flow (extension popup, mobile, bookmarklet):
+   After saving an item, suggest 2–3 alternative retailers for the same product
+   at potentially better prices (comparison shopping angle)
+   Model: Claude claude-haiku-4-5
+   Input: item title, category, current retailer
+   Output: alternative retailer names + search URL
+   Endpoint: POST /api/ai/alternatives { itemId }
+   Gating: Pro users only (hasFeature(user, 'advanced_analytics') as proxy; or new key)
+
+4. INTERNATIONAL EXPANSION
+   GBP → multi-currency support (GBP, USD, EUR, AUD)
+   Locale detection via Accept-Language header + user preference stored on users table
+   Amazon Associates: multiple regional tags (gifthint-20 US, gifthint-21 UK, etc.)
+   Stripe: multi-currency checkout (currency follows user locale)
+   Price display: Intl.NumberFormat with correct currency symbol
+   Phase 4 target: UK + US live; EU and AUD as stretch goals
+
+───────────────────────────────────────────────────────────────────────────────
+CRITICAL CONSTRAINTS (read before every action)
+───────────────────────────────────────────────────────────────────────────────
+
+1. lib/affiliate.ts is SERVER-ONLY PERMANENTLY.
+   Chrome Web Store Policy §4.4 prohibits affiliate rewriting in extensions.
+   The same applies to any client bundle, mobile app, or shared package.
+   lib/affiliate.ts must NEVER enter packages/shared/.
+   The mobile Share Extension calls POST /api/v1/save; the server applies rewriting.
+
+2. The existing /api/* routes must not break.
+   The web app and Chrome extension depend on them.
+   Phase 4 mobile routes go under /api/v1/* as thin wrappers — they call the same
+   handlers. Do not modify existing route signatures.
+
+3. Two Stripe webhooks, two secrets.
+   /api/group-gift/webhook  uses STRIPE_WEBHOOK_SECRET
+   /api/billing/webhook     uses STRIPE_BILLING_WEBHOOK_SECRET
+   Never mix them up. Each is a separate endpoint in the Stripe Dashboard.
+
+4. React Native has no cookie jar.
+   The Supabase client in the mobile app must use:
+     auth.storage: AsyncStorage
+     auth.detectSessionInUrl: false
+   Do NOT use supabase-browser.ts (which uses js-cookie) in the mobile app.
+
+5. isPro() and hasFeature() for all feature gating.
+   Never check subscription_status directly in UI or API code.
+   lib/permissions.ts handles both the paid subscription and referral unlock paths.
+
+6. RLS on every new table.
+   ALTER TABLE <table> ENABLE ROW LEVEL SECURITY;
+   Service-role-only tables: no public policies (the silence IS the policy).
+   Document intent with a comment block.
+
+7. Fail open on infrastructure.
+   Rate limiting, Redis, price checking, and push notification delivery all fail open.
+   Never block a real user action due to a third-party service outage.
+
+8. No PII in error responses.
+   serverError() in lib/api-response.ts logs raw errors server-side and returns
+   a generic message to the client. Never include user emails, names, or IDs in
+   4xx/5xx JSON responses.
+
+───────────────────────────────────────────────────────────────────────────────
+MONOREPO STRUCTURE TO SET UP (Sprint 1)
+───────────────────────────────────────────────────────────────────────────────
+
+Target structure:
+  gifthint/
+  ├── apps/
+  │   ├── web/           ← move existing gifthint-web repo here
+  │   └── mobile/        ← new Expo app
+  ├── packages/
+  │   └── shared/        ← @gifthint/shared
+  │       ├── src/
+  │       │   ├── types/        ← WishlistItem, User, Wishlist, etc.
+  │       │   ├── permissions/  ← isPro(), hasFeature()
+  │       │   ├── dna-tags/     ← DNA tag constants and helpers
+  │       │   ├── validators/   ← lib/validators.ts (zero-dep)
+  │       │   └── time/         ← lib/time.ts utilities
+  │       ├── package.json
+  │       └── tsconfig.json
+  ├── pnpm-workspace.yaml
+  ├── turbo.json
+  └── package.json
+
+Modules that MUST stay in apps/web/ only (never enter packages/shared/):
+  lib/affiliate.ts          — server-only, Chrome Store policy
+  lib/supabase-server.ts    — Node.js only
+  lib/supabase-browser.ts   — browser cookie-based, not for mobile
+  lib/email.ts              — Resend, server-only
+  lib/stripe.ts             — Stripe secret key, server-only
+  lib/rate-limit.ts         — Upstash, server-only
+  lib/referral.ts           — uses supabase-server
+  lib/rewards.ts            — uses supabase-server
+  lib/partners.ts           — uses supabase-server
+  lib/skimlinks-api.ts      — server-only API key
+  lib/amazon-associates-api.ts — server-only credentials
+
+Safe to extract into packages/shared/ (Phase 4 extraction plan):
+  types/wishlist.ts         — WishlistItem, User, Wishlist, GiftPool, etc.
+  lib/permissions.ts        — isPro(), hasFeature() (pure functions, no DB calls)
+  lib/dna-tags.ts           — tag constants and helpers (pure functions)
+  lib/validators.ts         — ParseResult, parseBody, all schemas (zero deps)
+  lib/time.ts               — date/time utilities (pure functions)
+
+Defer to Phase 5:
+  lib/occasion-themes.ts    — CSS tokens, web-only concern currently
+  lib/structured-data.ts    — JSON-LD, web-only
+
+───────────────────────────────────────────────────────────────────────────────
+MOBILE APP — SUPABASE CLIENT PATTERN
+───────────────────────────────────────────────────────────────────────────────
+
+apps/mobile/lib/supabase.ts:
+
+  import AsyncStorage from '@react-native-async-storage/async-storage'
+  import { createClient } from '@supabase/supabase-js'
+  import type { Database } from '@gifthint/shared'
+
+  export const supabase = createClient<Database>(
+    process.env.EXPO_PUBLIC_SUPABASE_URL!,
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: {
+        storage:            AsyncStorage,
+        autoRefreshToken:   true,
+        persistSession:     true,
+        detectSessionInUrl: false,  // CRITICAL: must be false for React Native
+      },
+    },
+  )
+
+Mobile env vars (apps/mobile/.env):
+  EXPO_PUBLIC_SUPABASE_URL=         (same as NEXT_PUBLIC_SUPABASE_URL)
+  EXPO_PUBLIC_SUPABASE_ANON_KEY=    (same as NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  EXPO_PUBLIC_API_URL=https://gifthint.io
+  EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY= (same as NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
+
+───────────────────────────────────────────────────────────────────────────────
+MOBILE APP — GOOGLE AUTH PATTERN
+───────────────────────────────────────────────────────────────────────────────
+
+apps/mobile/lib/auth.ts:
+
+  import * as WebBrowser from 'expo-web-browser'
+  import { supabase } from './supabase'
+
+  WebBrowser.maybeCompleteAuthSession()
+
+  export async function signInWithGoogle() {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: 'gifthint://auth/callback',
+        skipBrowserRedirect: true,
+      },
+    })
+    if (error || !data.url) throw error ?? new Error('No auth URL')
+
+    const result = await WebBrowser.openAuthSessionAsync(
+      data.url,
+      'gifthint://auth/callback',
+    )
+
+    if (result.type === 'success') {
+      const { data: session } = await supabase.auth.getSession()
+      return session
+    }
+  }
+
+Note: this does NOT call /api/auth/exchange — that endpoint is extension-only.
+The mobile app completes OAuth natively via Expo AuthSession.
+
+───────────────────────────────────────────────────────────────────────────────
+MOBILE APP — apiFetch WRAPPER PATTERN
+───────────────────────────────────────────────────────────────────────────────
+
+apps/mobile/lib/api.ts:
+
+  import { supabase } from './supabase'
+
+  const API_BASE = process.env.EXPO_PUBLIC_API_URL!  // https://gifthint.io
+
+  export async function apiFetch<T>(
+    path: string,
+    options?: RequestInit,
+  ): Promise<T> {
+    const { data: { session } } = await supabase.auth.getSession()
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      ...options?.headers,
+    }
+    const res = await fetch(`${API_BASE}${path}`, { ...options, headers })
+    const json = await res.json()
+    if (!res.ok) throw new Error(json.error?.message ?? 'API error')
+    return json.data as T
+  }
+
+The web API endpoints already accept JWT Bearer tokens from Supabase Auth.
+No changes needed on the server for the existing endpoints.
+
+───────────────────────────────────────────────────────────────────────────────
+SPRINT PLAN (Weeks 23–30, Phase 4)
+───────────────────────────────────────────────────────────────────────────────
+
+Sprint 1 (Week 23–24): Monorepo + Expo scaffold
+  1. Set up pnpm workspaces + Turborepo
+  2. Move existing Next.js app to apps/web/; verify build passes
+  3. Extract packages/shared/ (types, permissions, dna-tags, validators, time)
+  4. Scaffold apps/mobile/ with Expo Router, Supabase client, Google Auth
+  5. Verify apps/mobile/ can read wishlists from Supabase
+  Deliverable: monorepo builds; mobile app logs in and fetches data
+
+Sprint 2 (Week 25–26): Share Extension + /api/v1/save
+  1. Implement expo-share-intent for iOS Share Extension
+  2. Create POST /api/v1/save (thin re-export of items save handler + OG scrape)
+  3. Add CORS middleware for /api/v1/* (mobile needs cross-origin requests)
+  4. Mobile save flow: share URL → Share Extension → /api/v1/save → confirm screen
+  5. Add expo_push_token column to users; implement POST /api/v1/push-tokens
+  Deliverable: can save any URL from any iOS app to a GiftHint wishlist
+
+Sprint 3 (Week 27–28): Gifter flow + Stripe Payment Sheet
+  1. Gifter browse screen (existing /api/* endpoints via apiFetch)
+  2. Claim item (POST /api/claim/[itemId])
+  3. Group gift contribution via Stripe Payment Sheet (Apple Pay / Google Pay)
+  4. Push notification on claim and group gift milestone (lib/push.ts)
+  Deliverable: end-to-end gifter flow on mobile including payment
+
+Sprint 4 (Week 29–30): AI suggestions + App Store submission
+  1. POST /api/ai/suggestions — Claude claude-haiku-4-5 gift suggestions (rate-limited, gifter page)
+  2. POST /api/ai/alternatives — Claude claude-haiku-4-5 retailer alternatives (Pro only, save flow)
+  3. App Store connect setup: bundle ID, provisioning, metadata, screenshots
+  4. EAS Build: production iOS build + TestFlight distribution
+  5. App Store submission
+  Deliverable: iOS app submitted; AI features live on web
+
+───────────────────────────────────────────────────────────────────────────────
+FIRST ACTION
+───────────────────────────────────────────────────────────────────────────────
+
+Set up the monorepo. The existing code lives at:
+  /Users/carlos/Downloads/gifthint-web/
+
+Steps:
+1. Read package.json and tsconfig.json in /Users/carlos/Downloads/gifthint-web/
+   to understand the current project structure.
+2. Initialise a new monorepo at /Users/carlos/Downloads/gifthint/
+   with pnpm-workspace.yaml, turbo.json, and root package.json.
+3. Move (copy, not delete) the existing app to /Users/carlos/Downloads/gifthint/apps/web/
+   — preserve all git history by using `git mv` or equivalent.
+4. Scaffold /Users/carlos/Downloads/gifthint/packages/shared/ with:
+   - package.json (name: "@gifthint/shared", version: "0.1.0")
+   - tsconfig.json (extends the root tsconfig)
+   - src/types/ — copy types/wishlist.ts from the web app
+   - src/permissions/ — copy lib/permissions.ts (remove supabase-server imports;
+     accept PermissionsUser as input type only — it is already a plain interface)
+   - src/dna-tags/ — copy lib/dna-tags.ts (pure functions, no deps)
+   - src/validators/ — copy lib/validators.ts (zero deps)
+   - src/time/ — copy lib/time.ts if present
+   - src/index.ts — barrel export of all the above
+5. Update apps/web/ to import from @gifthint/shared instead of the local copies.
+   Run `pnpm build` in apps/web/ to verify nothing broke.
+6. Report the final monorepo structure, any import issues found, and confirm the
+   web app build passes.
+
+Do not scaffold the mobile app yet — that is Sprint 1 step 4 and will be a
+separate task once the monorepo structure is verified.

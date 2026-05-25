@@ -16,7 +16,7 @@
 
 'use client'
 
-import { useState, useMemo, useCallback, lazy, Suspense } from 'react'
+import { useState, useMemo, useCallback, lazy, Suspense, type ComponentType } from 'react'
 import Image                              from 'next/image'
 import { createClient }                   from '@supabase/supabase-js'
 import { tokens }                         from '@/tokens'
@@ -27,12 +27,14 @@ import { OccasionHero }                   from '@/components/OccasionHero'
 import { GifterFooter }                   from '@/components/GifterFooter'
 import { ViralCTABar }                    from '@/components/ViralCTABar'
 import { OccasionThemeProvider }          from '@/components/OccasionThemeContext'
+import { ThemeProvider }                  from '@/components/ThemeProvider'
 import { getOccasionTheme }               from '@/lib/occasion-themes'
 import { AlternativeGiftPanel }           from '@/components/AlternativeGiftPanel'
 import { DNA_TAG_TOOLTIPS }               from '@/lib/dna-tags'
 import { generateAlternativeGuidance }    from '@/lib/alternative-guidance'
 import type { DbWishlist }               from '@/lib/supabase-server'
 import type { WishUser, WishItem }        from './page'
+import type { WishlistItem }             from '@/types/wishlist'
 
 // ── Lazy-loaded below-fold components ─────────────────────────────────────────
 // Code-splitting these keeps the initial JS bundle tight and lets the gift grid
@@ -42,6 +44,11 @@ const ReminderSignup = lazy(() =>
 )
 const GifterCoordinationPanel = lazy(() =>
   import('@/components/GifterCoordinationPanel').then((m) => ({ default: m.GifterCoordinationPanel }))
+)
+// GroupGiftCard is lazy-loaded too: Stripe Elements and Supabase Realtime
+// connections only spin up when a group gift item is actually in the list.
+const GroupGiftCard = lazy(() =>
+  import('@/components/GroupGiftCard').then((m) => ({ default: m.GroupGiftCard as ComponentType<{ item: WishlistItem }> }))
 )
 
 // ── Product image blur placeholder ────────────────────────────────────────────
@@ -138,6 +145,7 @@ export default function GifterPage({ user, items: initialItems, wishlist }: Gift
         claimed_at:        new Date().toISOString(),
       })
       .eq('id', itemId)
+      .eq('is_claimed', false) // race-condition guard — no-op if already claimed
 
     if (error) {
       console.error('[GiftHint] claim error:', error.message)
@@ -197,13 +205,18 @@ export default function GifterPage({ user, items: initialItems, wishlist }: Gift
   const theme = getOccasionTheme(wishlist?.occasion ?? 'other')
 
   return (
+    <ThemeProvider themeKey={wishlist?.theme}>
     <OccasionThemeProvider theme={theme}>
       <div
         style={{
-          background:  tokens.colors.bg,
-          color:       tokens.colors.text,
+          // Use CSS custom properties injected by ThemeProvider so the page
+          // background and text colour respond to premium themes.  Falls back
+          // to the default tokens for any page that renders without a provider
+          // (e.g. the legacy /list/[username] route without a slug).
+          background:  'var(--theme-bg, #0C0C0E)',
+          color:       'var(--theme-text, #F0EEE8)',
           minHeight:   '100vh',
-          fontFamily:  tokens.font.sans,
+          fontFamily:  'var(--theme-font-body)',
         }}
       >
         {/* ViralCTABar reads accent colour from OccasionThemeContext */}
@@ -264,6 +277,7 @@ export default function GifterPage({ user, items: initialItems, wishlist }: Gift
         <GifterFooter />
       </div>
     </OccasionThemeProvider>
+    </ThemeProvider>
   )
 }
 
@@ -422,19 +436,25 @@ function GiftGrid({
               gap:                 '12px',
             }}
           >
-            {items.map((item, index) => (
-              <GiftCard
-                key={item.id}
-                item={item}
-                index={index}
-                onClaim={onClaim}
-                onUnclaim={onUnclaim}
-                wisherUserId={wisherUserId}
-                gifterPageUsername={gifterPageUsername}
-                wisherFirstName={name}
-                justClaimed={item.id === newlyClaimedId}
-              />
-            ))}
+            {items.map((item, index) =>
+              item.is_group_gift ? (
+                <Suspense key={item.id} fallback={<div style={{ height: '280px', background: tokens.colors.surface, borderRadius: '16px', border: `1px solid ${tokens.colors.border}` }} />}>
+                  <GroupGiftCard item={item as unknown as WishlistItem} />
+                </Suspense>
+              ) : (
+                <GiftCard
+                  key={item.id}
+                  item={item}
+                  index={index}
+                  onClaim={onClaim}
+                  onUnclaim={onUnclaim}
+                  wisherUserId={wisherUserId}
+                  gifterPageUsername={gifterPageUsername}
+                  wisherFirstName={name}
+                  justClaimed={item.id === newlyClaimedId}
+                />
+              )
+            )}
           </div>
         </section>
       </>
@@ -455,18 +475,24 @@ function GiftGrid({
           gap:                 '12px',
         }}
       >
-        {items.map((item, index) => (
-          <GiftCard
-            key={item.id}
-            item={item}
-            index={index}
-            onClaim={onClaim}
-            onUnclaim={onUnclaim}
-            wisherUserId={wisherUserId}
-            gifterPageUsername={gifterPageUsername}
-            justClaimed={item.id === newlyClaimedId}
-          />
-        ))}
+        {items.map((item, index) =>
+          item.is_group_gift ? (
+            <Suspense key={item.id} fallback={<div style={{ height: '280px', background: tokens.colors.surface, borderRadius: '16px', border: `1px solid ${tokens.colors.border}` }} />}>
+              <GroupGiftCard item={item as unknown as WishlistItem} />
+            </Suspense>
+          ) : (
+            <GiftCard
+              key={item.id}
+              item={item}
+              index={index}
+              onClaim={onClaim}
+              onUnclaim={onUnclaim}
+              wisherUserId={wisherUserId}
+              gifterPageUsername={gifterPageUsername}
+              justClaimed={item.id === newlyClaimedId}
+            />
+          )
+        )}
       </div>
     </section>
   )

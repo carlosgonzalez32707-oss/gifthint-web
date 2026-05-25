@@ -1,16 +1,28 @@
 /**
- * app/list/[username]/error.tsx — GiftHint
+ * app/list/[username]/error.tsx — GiftHint gifter page error boundary
  *
- * Next.js 14 error boundary for the gifter page route.
+ * Next.js error boundary for the gifter-facing route (/list/:username/:slug).
  * Catches unhandled exceptions thrown during rendering of page.tsx or
  * any of its Server Component children.
  *
  * Must be a Client Component — Next.js requirement for error.tsx.
+ *
+ * GIFTER PRIVACY PRINCIPLE
+ * ───────────────────────
+ * Gifters are unauthenticated visitors who may not know what "GiftHint" is.
+ * This error page NEVER shows:
+ *   - Stack traces or error messages (could expose wisher PII or item data)
+ *   - Technical identifiers (digest IDs, route paths)
+ *   - Any mention that the wisher uses GiftHint specifically
+ *
+ * Sentry still receives the full error + stack — we just don't display it.
+ * The errorBoundary:'gifter-page' tag makes it filterable in the Sentry UI.
  */
 
 'use client'
 
 import { useEffect } from 'react'
+import * as Sentry   from '@sentry/nextjs'
 import { tokens }    from '@/tokens'
 
 interface ErrorProps {
@@ -20,8 +32,12 @@ interface ErrorProps {
 
 export default function Error({ error, reset }: ErrorProps) {
   useEffect(() => {
-    // Log to your error monitoring service here (e.g. Sentry)
-    console.error('[GiftHint] gifter page error:', error)
+    // Send full error context to Sentry; show nothing technical to the gifter.
+    // Tagged so the Alert "error rate > 5% on gifter page" can filter by this tag.
+    Sentry.captureException(error, {
+      tags:  { errorBoundary: 'gifter-page' },
+      extra: { digest: error.digest },
+    })
   }, [error])
 
   return (
@@ -38,14 +54,14 @@ export default function Error({ error, reset }: ErrorProps) {
           className="text-xl font-bold"
           style={{ color: tokens.colors.text }}
         >
-          Something went wrong
+          This list isn&apos;t available right now
         </h1>
         <p
           className="text-sm leading-relaxed"
           style={{ color: tokens.colors.muted }}
         >
-          We couldn&apos;t load this gift list right now. It might be a
-          temporary hiccup — try refreshing.
+          The gift list you&apos;re looking for might have moved or be temporarily
+          unavailable. Try refreshing or come back in a moment.
         </p>
       </div>
 
@@ -73,19 +89,8 @@ export default function Error({ error, reset }: ErrorProps) {
         </a>
       </div>
 
-      {/* Show error digest in development for quick debugging */}
-      {process.env.NODE_ENV === 'development' && error.digest && (
-        <p
-          className="text-xs font-mono px-3 py-1.5 rounded-lg"
-          style={{
-            background: tokens.colors.surface2,
-            color:      tokens.colors.muted,
-            border:     `1px solid ${tokens.colors.border}`,
-          }}
-        >
-          Error ID: {error.digest}
-        </p>
-      )}
+      {/* Never show technical details on the gifter-facing page — even in dev.
+          Find the full error in Sentry using the errorBoundary:'gifter-page' filter. */}
     </div>
   )
 }

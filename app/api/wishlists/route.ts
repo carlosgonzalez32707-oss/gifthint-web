@@ -32,6 +32,7 @@ import {
   type OccasionKey,
   type CreateWishlistParams,
 } from '@/lib/wishlists'
+import { rateLimit, getClientIp }    from '@/lib/rate-limit'
 
 // ── Valid occasion keys for quick lookup ──────────────────────────────────────
 
@@ -40,7 +41,7 @@ const VALID_OCCASIONS = new Set<string>(OCCASION_TYPES.map((o) => o.key))
 // ── POST ──────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  // ── Parse body ─────────────────────────────────────────────────────────────
+  // ── Parse body (needed first to extract userId for per-user rate limit) ───
   let body: Record<string, unknown>
   try {
     body = await req.json()
@@ -52,6 +53,22 @@ export async function POST(req: NextRequest) {
   }
 
   const { userId, title, occasion, occasionDate, makeDefault } = body
+
+  // ── Rate limit: 50 saves / authenticated user / hour ─────────────────────
+  // Uses userId as the identifier when available; falls back to IP for
+  // unauthenticated calls (which fail validation below anyway).
+  const rateLimitId =
+    typeof userId === 'string' && userId.trim()
+      ? `save:${userId.trim()}`
+      : `save:${getClientIp(req)}`
+
+  const rl = await rateLimit(rateLimitId, 50, 3_600)
+  if (!rl.success) {
+    return NextResponse.json(
+      { error: 'rate_limited', message: 'Too many requests. Please try again later.' },
+      { status: 429, headers: { 'Retry-After': String(Math.max(1, Math.ceil((rl.reset - Date.now()) / 1000))) } },
+    )
+  }
 
   // ── Validate ───────────────────────────────────────────────────────────────
 

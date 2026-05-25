@@ -47,6 +47,8 @@ export interface DbWishlist {
   is_default:    boolean
   is_public:     boolean
   created_at:    string
+  /** Premium theme key. Defaults to 'default' (no theme). */
+  theme:         string
 }
 
 export interface CreateWishlistParams {
@@ -181,7 +183,7 @@ export async function getWishlists(userId: string): Promise<DbWishlist[]> {
 
   const { data, error } = await supabase
     .from('wishlists')
-    .select('id, user_id, title, occasion, occasion_date, slug, is_default, is_public, created_at')
+    .select('id, user_id, title, occasion, occasion_date, slug, is_default, is_public, created_at, theme')
     .eq('user_id', userId)
     .eq('is_public', true)
     .order('is_default', { ascending: false })
@@ -206,7 +208,7 @@ export async function getWishlistBySlug(
 
   const { data, error } = await supabase
     .from('wishlists')
-    .select('id, user_id, title, occasion, occasion_date, slug, is_default, is_public, created_at')
+    .select('id, user_id, title, occasion, occasion_date, slug, is_default, is_public, created_at, theme')
     .eq('user_id', userId)
     .eq('slug', slug)
     .maybeSingle()
@@ -227,7 +229,7 @@ export async function getDefaultWishlist(userId: string): Promise<DbWishlist | n
 
   const { data, error } = await supabase
     .from('wishlists')
-    .select('id, user_id, title, occasion, occasion_date, slug, is_default, is_public, created_at')
+    .select('id, user_id, title, occasion, occasion_date, slug, is_default, is_public, created_at, theme')
     .eq('user_id', userId)
     .eq('is_default', true)
     .maybeSingle()
@@ -280,7 +282,7 @@ export async function createWishlist(
       is_default:    makeDefault,
       is_public:     true,
     })
-    .select('id, user_id, title, occasion, occasion_date, slug, is_default, is_public, created_at')
+    .select('id, user_id, title, occasion, occasion_date, slug, is_default, is_public, created_at, theme')
     .single()
 
   if (error) {

@@ -24,6 +24,11 @@ import type { WishlistItem }                  from '@/types/wishlist'
 import GifterPage                            from '../GifterPage'
 import { TrackPageView }                     from '@/components/TrackPageView'
 import { GiftGridSkeleton }                  from '@/components/GiftGridSkeleton'
+import {
+  generateWishlistSchema,
+  generateBreadcrumbSchema,
+  type SchemaItem,
+}                                            from '@/lib/structured-data'
 
 // ── ISR — revalidate cached page every 60 s so claim counts stay fresh ───────
 export const revalidate = 60
@@ -70,9 +75,9 @@ export async function generateMetadata(
   const siteUrl  = process.env.NEXT_PUBLIC_APP_URL ?? 'https://gifthint.io'
   const listUrl  = `${siteUrl}/list/${params.username}/${params.slug}`
 
-  // Parallel-fetch item counts + OG image in a single round-trip
-  const [totalResult, availableResult, ogResult] = await Promise.all([
-    // Total item count (head: true = no row data, just the count)
+  // Parallel-fetch item counts, top product images, and retailers in one round-trip
+  const [totalResult, availableResult, topImagesResult, retailerResult] = await Promise.all([
+    // Total item count
     supabase
       .from('wishlist_items')
       .select('id', { count: 'exact', head: true })
@@ -85,30 +90,68 @@ export async function generateMetadata(
       .eq('wishlist_id', wishlist.id)
       .eq('is_claimed', false),
 
-    // First product image for OG card (prefer unclaimed items so image isn't greyed-out)
+    // Top 3 product images (unclaimed first — they render un-greyed on the card)
     supabase
       .from('wishlist_items')
       .select('image_url')
       .eq('wishlist_id', wishlist.id)
       .not('image_url', 'is', null)
-      .order('is_claimed', { ascending: true })  // unclaimed first
+      .order('is_claimed', { ascending: true })
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .limit(3),
+
+    // Distinct retailer names for the meta description
+    supabase
+      .from('wishlist_items')
+      .select('retailer')
+      .eq('wishlist_id', wishlist.id)
+      .not('retailer', 'is', null)
+      .limit(20),
   ])
 
   const totalItems     = totalResult.count ?? 0
   const availableItems = availableResult.count ?? 0
-  const ogImage        = ogResult.data?.image_url ?? null
 
-  // "[Name]'s [Occasion] Wishlist — [X] gifts · GiftHint"
-  const title = `${name}'s ${occasion.label} Wishlist — ${totalItems} gift${totalItems === 1 ? '' : 's'} · GiftHint`
+  // Up to 3 HTTPS product image URLs for the OG card
+  const topImageUrls = (topImagesResult.data ?? [])
+    .map((r) => r.image_url as string | null)
+    .filter((u): u is string => !!u && u.startsWith('https://'))
+    .slice(0, 3)
 
-  // "Help [Name] get the perfect [occasion] gifts. [X] items on their list, [Y] still available."
+  // Deduplicate and take up to 3 retailers for the description
+  const retailers = Array.from(
+    new Set(
+      (retailerResult.data ?? [])
+        .map((r) => r.retailer as string)
+        .filter(Boolean),
+    ),
+  ).slice(0, 3)
+  const retailerStr = retailers.length > 0 ? retailers.join(', ') : '500+ stores'
+
+  // "[Name]'s [Occasion] Wish List — [X] gift ideas · GiftHint"
+  const title =
+    `${name}'s ${occasion.label} Wish List — ` +
+    `${totalItems} gift idea${totalItems === 1 ? '' : 's'} · GiftHint`
+
+  // "Help [Name] celebrate their [occasion]. [X] items saved from [retailers]. [Y] still available."
   const description =
-    `Help ${name} get the perfect ${occasion.label.toLowerCase()} gifts. ` +
-    `${totalItems} item${totalItems === 1 ? '' : 's'} on their list, ` +
+    `Help ${name} celebrate their ${occasion.label.toLowerCase()}. ` +
+    `${totalItems} item${totalItems === 1 ? '' : 's'} saved from ${retailerStr}. ` +
     `${availableItems} still available.`
+
+  // ── Dynamic OG image URL ─────────────────────────────────────────────────────
+  // /api/og renders a 1200×630 card server-side using next/og (Edge runtime).
+  // We pass all visual data as query params; the route handles missing values gracefully.
+  const ogParams = new URLSearchParams({
+    username:       name,
+    occasion:       wishlist.occasion ?? 'other',
+    itemCount:      String(totalItems),
+    availableCount: String(availableItems),
+  })
+  if (wishlist.occasion_date) ogParams.set('occasionDate', wishlist.occasion_date)
+  topImageUrls.forEach((url, i) => ogParams.set(`img${i}`, url))
+
+  const ogImageUrl = `${siteUrl}/api/og?${ogParams.toString()}`
 
   return {
     title,
@@ -120,15 +163,13 @@ export async function generateMetadata(
       title,
       description,
       siteName:    'GiftHint',
-      ...(ogImage && {
-        images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
-      }),
+      images:      [{ url: ogImageUrl, width: 1200, height: 630, alt: title }],
     },
     twitter: {
-      card:        ogImage ? 'summary_large_image' : 'summary',
+      card:        'summary_large_image',
       title,
       description,
-      ...(ogImage && { images: [ogImage] }),
+      images:      [ogImageUrl],
     },
   }
 }
@@ -173,6 +214,8 @@ export default async function Page({ params }: RouteProps) {
       retailer,
       hint,
       dna_tags,
+      is_group_gift,
+      group_gift_target,
       is_claimed,
       claimed_by,
       claimed_at,
@@ -196,8 +239,31 @@ export default async function Page({ params }: RouteProps) {
     process.env.SKIMLINKS_PUBLISHER_ID,
   )
 
+  // 5. Build JSON-LD schemas — ItemList (top 5 unclaimed) + BreadcrumbList
+  const occasionMeta = getOccasionMeta(wishlist.occasion)
+  const wishlistSchema = generateWishlistSchema(
+    user,
+    wishlist,
+    rewrittenItems as unknown as SchemaItem[],
+  )
+  const breadcrumbSchema = generateBreadcrumbSchema(
+    user,
+    wishlist,
+    occasionMeta.label,
+  )
+
   return (
     <>
+      {/* Structured data — parsed by Google before page render */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(wishlistSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
+      />
+
       {/* Fire-and-forget page view — client-side, after hydration */}
       <TrackPageView wishlistId={wishlist.id} />
 

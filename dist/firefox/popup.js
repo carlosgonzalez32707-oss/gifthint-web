@@ -4,7 +4,7 @@
     return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
   };
 
-  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.iU2yKg31WA/supabase.js
+  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.9tNOZ7p1Qo/supabase.js
   async function supabaseFetch(path, { method = "GET", body, token } = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -53,7 +53,7 @@
   }
   var SUPABASE_URL, SUPABASE_ANON_KEY, TIMEOUT_MS, SAVE_QUEUE_KEY;
   var init_supabase = __esm({
-    "../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.iU2yKg31WA/supabase.js"() {
+    "../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.9tNOZ7p1Qo/supabase.js"() {
       SUPABASE_URL = "https://pxegvviakrjhldtwtobi.supabase.co";
       SUPABASE_ANON_KEY = "<YOUR_ANON_KEY>";
       TIMEOUT_MS = 8e3;
@@ -61,7 +61,7 @@
     }
   });
 
-  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.iU2yKg31WA/compat.js
+  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.9tNOZ7p1Qo/compat.js
   var IS_FIREFOX = typeof browser !== "undefined" && typeof browser.runtime !== "undefined";
   var _api = IS_FIREFOX ? (
     /* global browser */
@@ -120,8 +120,8 @@
     isFirefox: IS_FIREFOX
   };
 
-  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.iU2yKg31WA/auth.js
-  var OAUTH_CLIENT_ID = "YOUR_OAUTH_CLIENT_ID.apps.googleusercontent.com";
+  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.9tNOZ7p1Qo/auth.js
+  var OAUTH_CLIENT_ID = "987313469607-drno4044uvbr9v4fjdkfskuq1o43cd4v.apps.googleusercontent.com";
   var EXCHANGE_URL = "https://gifthint.io/api/auth/exchange";
   var SCOPES = ["email", "profile", "openid"];
   var USER_KEY = "gh_user";
@@ -238,10 +238,10 @@
     return result[USER_KEY] ?? null;
   }
 
-  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.iU2yKg31WA/items.js
+  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.9tNOZ7p1Qo/items.js
   init_supabase();
 
-  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.iU2yKg31WA/wishlists.js
+  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.9tNOZ7p1Qo/wishlists.js
   init_supabase();
   var OCCASION_LABELS = {
     birthday: { label: "Birthday", emoji: "\u{1F382}" },
@@ -306,7 +306,7 @@
     }
   }
 
-  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.iU2yKg31WA/items.js
+  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.9tNOZ7p1Qo/items.js
   async function saveItem(productData, userId, token, wishlistId = null) {
     if (!productData?.isProductPage) {
       return { error: "Not a product page" };
@@ -356,7 +356,7 @@
     }
   }
 
-  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.iU2yKg31WA/popup.js
+  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.9tNOZ7p1Qo/popup.js
   var SITE_URL = "https://gifthint.io";
   var DASHBOARD_URL = `${SITE_URL}/dashboard`;
   var PURPLE = "#8B83F0";

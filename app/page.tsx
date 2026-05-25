@@ -54,7 +54,9 @@ const c = {
 }
 const font = "var(--font-inter), system-ui, -apple-system, 'Segoe UI', sans-serif"
 
-const CHROME_STORE_URL = 'https://chrome.google.com/webstore/detail/gifthint/PLACEHOLDER'
+const CHROME_STORE_URL =
+  process.env.NEXT_PUBLIC_CHROME_STORE_URL ??
+  'https://chromewebstore.google.com/detail/gifthint/PLACEHOLDER'
 
 // ── All CSS animations + styles ───────────────────────────────────────────────
 
@@ -676,7 +678,7 @@ export default function LandingPage() {
                       <span style={{ fontSize: 20, flexShrink: 0 }}>{item.e}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontSize: 12, fontWeight: 600, color: c.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.n}</p>
-                        <p style={{ fontSize: 11, color: item.claimed ? c.muted : c.green, fontWeight: 600 }}>{item.claimed ? '✓ Claimed' : item.price}</p>
+                        <p style={{ fontSize: 11, color: item.claimed ? c.muted : c.green, fontWeight: 600 }}>{item.claimed ? '✓ Claimed' : item.p}</p>
                       </div>
                       {!item.claimed && <div style={{ background: c.purple, borderRadius: 6, padding: '4px 10px', fontSize: 11, color: '#fff', fontWeight: 700, flexShrink: 0 }}>Buy</div>}
                     </div>

@@ -24,12 +24,13 @@
 
 'use client'
 
-import { useState }           from 'react'
-import { tokens }             from '@/tokens'
-import { CountdownBadge }     from '@/components/CountdownBadge'
-import { useOccasionTheme }   from '@/components/OccasionThemeContext'
-import type { DbWishlist }    from '@/lib/supabase-server'
-import type { WishUser }      from '@/app/list/[username]/page'
+// React import not needed — this file uses JSX transform only
+import { tokens }                from '@/tokens'
+import { CountdownBadge }        from '@/components/CountdownBadge'
+import { useOccasionTheme }      from '@/components/OccasionThemeContext'
+import { ShareListButton }       from '@/components/ShareListButton'
+import type { DbWishlist }       from '@/lib/supabase-server'
+import type { WishUser }         from '@/app/list/[username]/page'
 
 // ── LockIcon ──────────────────────────────────────────────────────────────────
 
@@ -123,7 +124,6 @@ export function OccasionHero({
   listUrl,
 }: OccasionHeroProps) {
   const theme  = useOccasionTheme()
-  const [copied, setCopied] = useState(false)
 
   const name     = user.display_name?.split(' ')[0] ?? user.public_username ?? 'Someone'
   const tagline  = theme.heroTagline ? theme.heroTagline(name) : null
@@ -135,16 +135,6 @@ export function OccasionHero({
     if (wishlist && wishlist.title !== 'My Wishlist')     return wishlist.title
     return `${name}'s Gift List`
   })()
-
-  async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(listUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2_000)
-    } catch {
-      /* clipboard unavailable on http:// */
-    }
-  }
 
   const isDefaultOccasion = !wishlist || wishlist.occasion === 'other'
 
@@ -301,29 +291,21 @@ export function OccasionHero({
           </div>
         </div>
 
-        {/* ── Copy share link button ───────────────────────────────────────── */}
-        <button
-          onClick={copyLink}
-          aria-label={copied ? 'Link copied!' : 'Copy gift list link'}
-          style={{
-            display:      'inline-flex',
-            alignItems:   'center',
-            gap:          '7px',
-            padding:      '8px 20px',
-            borderRadius: '999px',
-            background:   copied ? 'rgba(78,201,154,0.13)' : theme.accentDim,
-            border:       `1px solid ${copied ? 'rgba(78,201,154,0.30)' : theme.accentRing}`,
-            color:        copied ? '#4EC99A' : theme.accent,
-            fontSize:     '13px',
-            fontWeight:   700,
-            cursor:       'pointer',
-            transition:   'background 200ms ease, border-color 200ms ease, color 200ms ease',
-            marginTop:    '14px',
-            letterSpacing: '-0.01em',
-          }}
-        >
-          {copied ? '✓ Copied!' : '🔗 Copy gift list link'}
-        </button>
+        {/* ── Share button ─────────────────────────────────────────────────── */}
+        <div style={{ marginTop: '14px' }}>
+          <ShareListButton
+            listUrl={listUrl}
+            itemCount={itemCount}
+            occasionLabel={
+              wishlist
+                ? (wishlist.occasion !== 'other'
+                    ? wishlist.occasion.replace('_', ' ')
+                    : 'gift')
+                : 'gift'
+            }
+            accent={theme.accent}
+          />
+        </div>
 
         {/* ── No-spoilers notice ───────────────────────────────────────────── */}
         <p

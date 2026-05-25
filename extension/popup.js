@@ -28,6 +28,7 @@ import {
   getWishlists,
   getLastUsedWishlist,
   setLastUsedWishlist,
+  getRecentItems,
 } from './items.js'
 
 import { getPublicUsername, OCCASION_LABELS } from './wishlists.js'
@@ -95,6 +96,110 @@ function occasionEmoji(occasionKey) {
 function buildShareUrl(publicUsername, wishlist) {
   if (!publicUsername || !wishlist?.slug) return null
   return `${SITE_URL}/list/${publicUsername}/${wishlist.slug}`
+}
+
+// ── Price indicator helpers ───────────────────────────────────────────────────
+
+/**
+ * Returns the price-indicator HTML (badge + tooltip) for one item.
+ * Logic:
+ *   🌟 "Lowest ever" (gold)  — price ≈ lowest_price (within 0.5%)
+ *   ↓  "Price dropped" (green) — lowest_price < price * 0.99  (was cheaper → recovering)
+ *   No indicator when price or lowest_price are absent.
+ *
+ * NOTE: "price rose since saved" cannot be computed reliably from these two
+ * fields alone without price_history. If you need that indicator, fetch
+ * /api/price-history/[itemId] and compare first vs latest row.
+ *
+ * @param {{ price: number|null, lowest_price: number|null, currency: string }} item
+ */
+function priceIndicatorHtml(item) {
+  const { price, lowest_price, currency } = item
+  if (!price || price <= 0) return ''
+
+  const fmt = (p) => {
+    try {
+      return new Intl.NumberFormat('en-GB', {
+        style: 'currency', currency: currency ?? 'GBP', maximumFractionDigits: 2,
+      }).format(p)
+    } catch {
+      return `${currency ?? ''} ${Number(p).toFixed(2)}`
+    }
+  }
+
+  if (lowest_price !== null && lowest_price > 0) {
+    const diffPct = Math.abs(price - lowest_price) / lowest_price * 100
+
+    // Lowest ever: within 0.5% tolerance for floating-point noise
+    if (diffPct < 0.5) {
+      return `<span class="price-indicator price-indicator--lowest" title="🏆 All-time low price: ${escHtml(fmt(lowest_price))}">🌟 Lowest ever</span>`
+    }
+
+    // Price was lower before → show a subtle down indicator so the gifter
+    // knows it has been cheaper (might drop again)
+    if (lowest_price < price * 0.99) {
+      return `<span class="price-indicator price-indicator--down" title="Was as low as ${escHtml(fmt(lowest_price))} — may drop again">↓ Was ${escHtml(fmt(lowest_price))}</span>`
+    }
+  }
+
+  return ''
+}
+
+/**
+ * Renders the "Recent saves" section HTML for the active wishlist.
+ *
+ * @param {Array}        items       — from getRecentItems()
+ * @param {object|null}  activeList  — currently selected wishlist
+ */
+function recentItemsHtml(items, activeList) {
+  if (!items || items.length === 0) {
+    return `
+      <div class="recent-items">
+        <div class="recent-items__label">Recent saves</div>
+        <div style="padding:10px 0;font-size:11px;color:#555450;text-align:center;">
+          No items in this list yet.
+        </div>
+      </div>
+    `
+  }
+
+  const rows = items.map((item) => {
+    const thumb = item.image_url
+      ? `<img src="${escHtml(item.image_url)}" alt="" class="recent-item__thumb" loading="lazy">`
+      : `<div class="recent-item__thumb--placeholder">🛍️</div>`
+
+    const buyUrl  = escHtml(item.affiliate_url ?? item.source_url ?? '#')
+    const claimed = item.is_claimed
+
+    const priceHtml = item.price != null
+      ? `<span class="recent-item__price">${escHtml(formatPrice(item.price))}</span>
+         ${priceIndicatorHtml(item)}`
+      : `<span class="recent-item__price no-price">No price</span>`
+
+    return `
+      <div class="recent-item">
+        <a href="${buyUrl}" target="_blank" rel="noopener noreferrer" style="display:contents;text-decoration:none;">${thumb}</a>
+        <div class="recent-item__body">
+          <a href="${buyUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">
+            <div class="recent-item__title${claimed ? ' claimed' : ''}">${escHtml(item.title ?? 'Saved item')}</div>
+          </a>
+          <div class="recent-item__price-row">
+            ${priceHtml}
+            ${claimed ? `<span style="font-size:10px;color:#7A7870;font-weight:600;">✓ Claimed</span>` : ''}
+          </div>
+        </div>
+      </div>
+    `
+  }).join('')
+
+  const listName = escHtml(activeList?.title ?? 'your list')
+
+  return `
+    <div class="recent-items">
+      <div class="recent-items__label">Recent saves in ${listName}</div>
+      ${rows}
+    </div>
+  `
 }
 
 // ── Countdown badge HTML ──────────────────────────────────────────────────────
@@ -249,8 +354,9 @@ function renderSignedOut() {
  * @param {{ wishlists:Array, lastWishlist:object|null }}                   listData
  * @param {{ title?:string, price?:number, imageUrl?:string }|null}        product
  * @param {string|null}                                                     publicUsername
+ * @param {Array|null}                                                      recentItems
  */
-function renderSignedIn(user, { wishlists, lastWishlist }, product, publicUsername) {
+function renderSignedIn(user, { wishlists, lastWishlist }, product, publicUsername, recentItems = null) {
   const name     = user.given_name ?? user.name ?? 'there'
   const hasLists = wishlists && wishlists.length > 0
 
@@ -318,6 +424,12 @@ function renderSignedIn(user, { wishlists, lastWishlist }, product, publicUserna
       </button>
     </div>
 
+    <!-- ── Recent saves ────────────────────────────────────────────────────── -->
+    ${recentItems !== null
+      ? recentItemsHtml(recentItems, activeList)
+      : ''
+    }
+
     <!-- ── Product preview ───────────────────────────────────────────────── -->
     ${product ? `
       <div style="
@@ -375,9 +487,9 @@ function renderSignedIn(user, { wishlists, lastWishlist }, product, publicUserna
     wireListSelector(wishlists, activeList, user)
   }
 
-  // Share button
+  // Share button — pass activeList so the message includes the occasion label
   if (shareUrl) {
-    el('btn-share')?.addEventListener('click', () => handleShare(shareUrl))
+    el('btn-share')?.addEventListener('click', () => handleShare(shareUrl, activeList))
   }
 
   // Save button
@@ -387,10 +499,11 @@ function renderSignedIn(user, { wishlists, lastWishlist }, product, publicUserna
   }
 
   // Store state we need for "re-render on list change"
-  el('root').__listData    = { wishlists, lastWishlist }
-  el('root').__product     = product
-  el('root').__publicUser  = publicUsername
-  el('root').__user        = user
+  el('root').__listData     = { wishlists, lastWishlist }
+  el('root').__product      = product
+  el('root').__publicUser   = publicUsername
+  el('root').__user         = user
+  el('root').__recentItems  = recentItems
 }
 
 // ── List selector wiring ──────────────────────────────────────────────────────
@@ -442,12 +555,27 @@ function wireListSelector(wishlists, activeList, user) {
       await setLastUsedWishlist(user.id, chosen)
       // Re-render with the new active list (preserves product + publicUsername)
       const root = el('root')
+      // Show immediately with cached items, then fetch fresh items for new list
       renderSignedIn(
         root.__user,
         { wishlists, lastWishlist: chosen },
         root.__product,
         root.__publicUser,
+        null,   // clear while fetching
       )
+      // Fetch recent items for the newly selected list
+      withAuth((token) => getRecentItems(chosen.id, token)).then(({ items }) => {
+        if (items) {
+          const r = el('root')
+          renderSignedIn(
+            r.__user,
+            { wishlists, lastWishlist: chosen },
+            r.__product,
+            r.__publicUser,
+            items,
+          )
+        }
+      })
       return
     }
 
@@ -492,23 +620,46 @@ async function handleSignOut() {
 }
 
 /**
- * Copies the share URL to the clipboard and shows a brief "Copied!" confirmation.
+ * Builds the social share message — same format used by ShareListButton.tsx.
+ *
+ * "I've added [X] things to my [occasion] wishlist — you can buy me exactly
+ *  what I want! 🎁 [URL]"
+ *
  * @param {string} url
+ * @param {{ occasion: string, items?: { length: number } }|null} wishlist
+ * @returns {string}
  */
-async function handleShare(url) {
+function buildShareMessage(url, wishlist) {
+  const occasionKey = wishlist?.occasion ?? 'other'
+  const label = OCCASION_LABELS[occasionKey]
+    ? OCCASION_LABELS[occasionKey].label.toLowerCase()
+    : 'gift'
+  const count = wishlist?.item_count ?? wishlist?.items?.length ?? 'some'
+  return `I've added ${count} thing${count !== 1 ? 's' : ''} to my ${label} wishlist — you can buy me exactly what I want! 🎁 ${url}`
+}
+
+/**
+ * Copies the full share message (not just the URL) to the clipboard and shows
+ * a "Copied share message!" toast on the button.
+ *
+ * @param {string} url
+ * @param {{ occasion: string }|null} activeList
+ */
+async function handleShare(url, activeList) {
+  const shareText = buildShareMessage(url, activeList)
   try {
-    await navigator.clipboard.writeText(url)
+    await navigator.clipboard.writeText(shareText)
     const btn = el('btn-share')
     if (btn) {
       btn.classList.add('copied')
-      btn.textContent = '✓ Copied!'
+      btn.textContent = '✓ Copied share message!'
       setTimeout(() => {
         btn.classList.remove('copied')
         btn.textContent = '🔗 Share list'
-      }, 2_000)
+      }, 2_500)
     }
   } catch {
-    // Clipboard API can fail in some contexts — open the URL as fallback
+    // Clipboard API unavailable — fall back to opening the URL directly
     chrome.tabs.create({ url })
   }
 }
@@ -565,7 +716,33 @@ async function initSignedIn(user) {
   const wishlists    = listResult.data ?? listResult.wishlists ?? []
   const lastWishlist = await getLastUsedWishlist(user.id)
 
-  renderSignedIn(user, { wishlists, lastWishlist }, product, publicUsername)
+  // Resolve the active list so we can fetch its recent items
+  const activeList = wishlists.length > 0
+    ? (wishlists.find((w) => w.id === lastWishlist?.id)
+       ?? wishlists.find((w) => w.is_default)
+       ?? wishlists[0])
+    : null
+
+  // Render immediately with no items (fast first paint), then stream items in
+  renderSignedIn(user, { wishlists, lastWishlist }, product, publicUsername, null)
+
+  // Fetch recent items for the active list asynchronously
+  if (activeList?.id) {
+    const { items } = await withAuth((token) => getRecentItems(activeList.id, token))
+    if (items) {
+      // Re-render only if the root is still in the same state (user hasn't navigated)
+      const root = el('root')
+      if (root?.__user?.id === user.id) {
+        renderSignedIn(
+          root.__user,
+          root.__listData,
+          root.__product,
+          root.__publicUser,
+          items,
+        )
+      }
+    }
+  }
 }
 
 // ── Product detection ─────────────────────────────────────────────────────────

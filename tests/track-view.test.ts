@@ -14,10 +14,17 @@
  *
  * Mock strategy:
  *   createServerClient() is replaced with a chainable mock identical to the
- *   pattern used across the test suite. The rate-limit cache is a module-level
- *   Map inside route.ts; we reset it between tests by clearing it via the
- *   exported handle. Because Jest re-uses module instances across tests in the
- *   same file we must clear VIEW_RATE_CACHE after each rate-limit test.
+ *   pattern used across the test suite.
+ *
+ *   lib/rate-limit is mocked with a stateful in-memory Set so tests control
+ *   exactly when the rate limit fires. The first call to rateLimit() with a
+ *   given identifier succeeds; subsequent calls with the same identifier fail
+ *   (simulating "one view per IP per page per hour" deduplication). Each
+ *   unique list ID used in non-rate-limit tests gets its own slot, so those
+ *   tests are always unblocked.
+ *
+ *   lib/abuse-detection is mocked as no-ops so detectFakeViews() does not
+ *   attempt real Redis operations during tests.
  *
  * Fire-and-forget note:
  *   The route detaches an async block. We flush it with a short await so the
@@ -26,6 +33,37 @@
 
 jest.mock('@/lib/supabase-server', () => ({
   createServerClient: jest.fn(),
+}))
+
+// ── Rate-limit mock (stateful in-memory Set) ─────────────────────────────────
+// First call with a given identifier → success; repeat calls → blocked.
+// This mirrors the old in-memory VIEW_RATE_CACHE behaviour without needing Redis.
+
+const _rateLimitSeen = new Set<string>()
+
+jest.mock('@/lib/rate-limit', () => ({
+  rateLimit: jest.fn().mockImplementation(async (id: string, limit: number) => {
+    if (_rateLimitSeen.has(id)) {
+      return { success: false, remaining: 0, reset: Date.now() + 3_600_000, limit }
+    }
+    _rateLimitSeen.add(id)
+    return { success: true, remaining: limit - 1, reset: Date.now() + 3_600_000, limit }
+  }),
+  getClientIp: (req: { headers: { get: (h: string) => string | null } }) => {
+    const fwd = req.headers.get('x-forwarded-for')
+    if (fwd) return fwd.split(',')[0].trim()
+    return req.headers.get('x-real-ip') ?? 'unknown'
+  },
+  rateLimitResponse: jest.fn().mockReturnValue(new Response(null, { status: 429 })),
+  getRedisClient:    jest.fn().mockReturnValue(null),
+}))
+
+// ── Abuse-detection mock ──────────────────────────────────────────────────────
+jest.mock('@/lib/abuse-detection', () => ({
+  detectClickFraud:   jest.fn().mockResolvedValue({ flagged: false }),
+  detectFakeViews:    jest.fn().mockResolvedValue({ flagged: false }),
+  detectClaimSpam:    jest.fn().mockResolvedValue({ flagged: false }),
+  detectEmailHarvest: jest.fn().mockResolvedValue({ flagged: false }),
 }))
 
 import { NextRequest }        from 'next/server'

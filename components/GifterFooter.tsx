@@ -7,7 +7,12 @@
  *
  * Layout (three rows, centred on mobile):
  *   Row 1: ℹ affiliate disclosure (left) | partner badges (right)
- *   Row 2: navigation links (centred)
+ *   Row 2: SEO CTAs — occasion-specific "Create your [x] list" + "Powered by GiftHint"
+ *   Row 3: navigation links (centred)
+ *
+ * The occasion-specific CTA links to /gifts/[occasion] passing PageRank from
+ * gifter pages to the SEO landing pages. "Powered by GiftHint" links to the
+ * homepage. Both are visible, crawlable <a> tags — not rel="nofollow".
  *
  * On narrow mobile the two-column row stacks vertically.
  */
@@ -17,6 +22,26 @@
 import Link                    from 'next/link'
 import { tokens }              from '@/tokens'
 import { useOccasionTheme }    from '@/components/OccasionThemeContext'
+
+// ── Occasion helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Converts a DB occasion key (underscores) to the URL slug (hyphens).
+ * e.g. "baby_shower" → "baby-shower", "birthday" → "birthday"
+ */
+function occasionUrlSlug(key: string): string {
+  return key.replace(/_/g, '-')
+}
+
+const OCCASION_DISPLAY_LABELS: Record<string, string> = {
+  birthday:     'birthday',
+  christmas:    'Christmas',
+  wedding:      'wedding',
+  baby_shower:  'baby shower',
+  graduation:   'graduation',
+  housewarming: 'housewarming',
+  anniversary:  'anniversary',
+}
 
 // ── InfoIcon ──────────────────────────────────────────────────────────────────
 
@@ -44,6 +69,13 @@ function InfoIcon() {
 
 export function GifterFooter() {
   const theme = useOccasionTheme()
+
+  // Determine the occasion-specific landing page link
+  const occasionSlug    = occasionUrlSlug(theme.key)
+  const occasionLabel   = OCCASION_DISPLAY_LABELS[theme.key] ?? 'gift'
+  const occasionHref    = theme.key !== 'other'
+    ? `/gifts/${occasionSlug}`
+    : '/gifts'
 
   return (
     <footer
@@ -140,10 +172,20 @@ export function GifterFooter() {
         </div>
       </div>
 
-      {/* ── Create-your-own CTA ────────────────────────────────────────────── */}
-      <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+      {/* ── SEO CTAs — passes PageRank to occasion landing pages ───────────── */}
+      <div
+        style={{
+          display:        'flex',
+          flexWrap:       'wrap',
+          alignItems:     'center',
+          justifyContent: 'center',
+          gap:            '10px',
+          marginBottom:   '14px',
+        }}
+      >
+        {/* Occasion-specific CTA: "Create your own [birthday] list" → /gifts/birthday */}
         <a
-          href="/get-started"
+          href={occasionHref}
           style={{
             display:        'inline-flex',
             alignItems:     'center',
@@ -158,10 +200,35 @@ export function GifterFooter() {
             textDecoration: 'none',
             letterSpacing:  '-0.01em',
             transition:     'background 150ms ease',
+            whiteSpace:     'nowrap',
           }}
         >
-          ✨ Create your own free wishlist
+          ✨ Create your own {occasionLabel} list
         </a>
+
+        {/* "Powered by GiftHint" → homepage */}
+        <Link
+          href="/"
+          style={{
+            display:        'inline-flex',
+            alignItems:     'center',
+            gap:            '5px',
+            padding:        '9px 18px',
+            borderRadius:   '999px',
+            background:     tokens.colors.surface2,
+            border:         `1px solid ${tokens.colors.border}`,
+            color:          tokens.colors.muted,
+            fontSize:       '12px',
+            fontWeight:     600,
+            textDecoration: 'none',
+            letterSpacing:  '-0.01em',
+            transition:     'opacity 150ms ease',
+            whiteSpace:     'nowrap',
+          }}
+        >
+          <span aria-hidden="true" style={{ fontSize: '14px' }}>🎁</span>
+          Powered by GiftHint
+        </Link>
       </div>
 
       {/* ── Navigation links ───────────────────────────────────────────────── */}

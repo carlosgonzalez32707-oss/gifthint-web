@@ -1,5 +1,5 @@
 (() => {
-  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.iU2yKg31WA/hint-sheet.js
+  // ../../../../private/var/folders/gf/cg_yq02x5zs0tn6wdvydnplm0000gn/T/tmp.9tNOZ7p1Qo/hint-sheet.js
   var DNA_TAG_LIBRARY = {
     clothing: {
       label: "Clothing / Fashion",

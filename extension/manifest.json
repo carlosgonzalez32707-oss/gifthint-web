@@ -41,6 +41,11 @@
     "128": "icons/icon-128.png"
   },
 
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
