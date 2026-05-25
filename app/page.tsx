@@ -269,7 +269,7 @@ export default function LandingPage() {
           <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.4px' }}>GiftHint</span>
         </a>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <a href="/list" className="nav-link" style={{ fontSize: 13.5, fontWeight: 500, color: c.muted, padding: '6px 12px' }}>Sign in</a>
+          <a href="/signin" className="nav-link" style={{ fontSize: 13.5, fontWeight: 500, color: c.muted, padding: '6px 12px' }}>Sign in</a>
           <a href={CHROME_STORE_URL} target="_blank" rel="noopener noreferrer"
             className="gh-cta-shimmer"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: c.purple, color: '#fff', borderRadius: 999, padding: '7px 18px', fontSize: 13, fontWeight: 700, boxShadow: `0 2px 12px ${c.purpleGlow}` }}>

@@ -205,7 +205,7 @@ export default async function GiftsHubPage() {
           <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.4px' }}>GiftHint</span>
         </a>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <a href="/list" className="nav-link" style={{ fontSize: 13, fontWeight: 500, color: c.muted, padding: '6px 12px' }}>Sign in</a>
+          <a href="/signin" className="nav-link" style={{ fontSize: 13, fontWeight: 500, color: c.muted, padding: '6px 12px' }}>Sign in</a>
           <a
             href={CHROME_STORE_URL}
             target="_blank"
