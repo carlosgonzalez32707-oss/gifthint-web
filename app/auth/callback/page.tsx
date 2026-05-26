@@ -23,6 +23,7 @@ function CallbackHandler() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const [status, setStatus] = useState<'exchanging' | 'error'>('exchanging')
+  const [errorMsg, setErrorMsg] = useState<string>('')
 
   useEffect(() => {
     const code    = searchParams.get('code')
@@ -41,8 +42,9 @@ function CallbackHandler() {
     supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
       if (error) {
         console.error('[auth/callback] exchangeCodeForSession failed:', error.message)
+        setErrorMsg(error.message)
         setStatus('error')
-        setTimeout(() => router.replace('/?auth_error=callback_failed'), 2000)
+        setTimeout(() => router.replace(`/?auth_error=${encodeURIComponent(error.message)}`), 4000)
       } else {
         router.replace(next)
       }
@@ -53,6 +55,11 @@ function CallbackHandler() {
     return (
       <div style={styles.center}>
         <p style={styles.msg}>Sign-in failed — redirecting you home…</p>
+        {errorMsg && (
+          <p style={{ ...styles.msg, color: '#f87171', fontSize: '13px', maxWidth: '400px', textAlign: 'center' }}>
+            {errorMsg}
+          </p>
+        )}
       </div>
     )
   }

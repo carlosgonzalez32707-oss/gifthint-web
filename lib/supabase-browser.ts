@@ -39,6 +39,8 @@ export function getBrowserClient(): SupabaseClient {
       // Persist session in localStorage so the user stays logged in across tabs
       persistSession: true,
       autoRefreshToken: true,
+      // Required for PKCE OAuth flow (code + verifier exchange)
+      flowType: 'pkce',
     },
   })
 
