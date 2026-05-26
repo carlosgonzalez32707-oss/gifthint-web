@@ -4,36 +4,44 @@
  * app/auth/callback/page.tsx — GiftHint
  *
  * Client-side PKCE callback page.
- *
- * Supabase 2.x uses PKCE by default. After Google OAuth the browser lands here
- * with ?code=<pkce_code>&next=<destination>. We use the browser Supabase client
- * to exchange the code for a session (stored in localStorage), then redirect.
- *
- * Must be a Client Component — exchangeCodeForSession writes to localStorage
- * and cannot run in a server context with plain @supabase/supabase-js.
  */
 
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams }    from 'next/navigation'
 import { getBrowserClient }              from '@/lib/supabase-browser'
 
-// ── Inner component (reads searchParams — must be inside Suspense) ─────────────
+// ── Inner component ────────────────────────────────────────────────────────────
 
 function CallbackHandler() {
   const router       = useRouter()
   const searchParams = useSearchParams()
-  const [status, setStatus] = useState<'exchanging' | 'error'>('exchanging')
+  const [status,   setStatus]   = useState<'exchanging' | 'error'>('exchanging')
   const [errorMsg, setErrorMsg] = useState<string>('')
+  const [debug,    setDebug]    = useState<string>('')
 
   useEffect(() => {
     const code    = searchParams.get('code')
     const nextRaw = searchParams.get('next') ?? '/dashboard'
-    // Validate next to prevent open-redirect
     const next    = nextRaw.startsWith('/') ? nextRaw : '/dashboard'
 
+    // ── Capture localStorage debug snapshot ──────────────────────────────────
+    const lsKeys   = Object.keys(localStorage)
+    const sbKeys   = lsKeys.filter(k => k.startsWith('sb-') || k.includes('verifier') || k.includes('supabase'))
+    const verifier = sbKeys
+      .filter(k => k.includes('verifier'))
+      .map(k => `${k}=${localStorage.getItem(k)?.slice(0, 20)}…`)
+      .join(' | ')
+
+    const debugStr = [
+      `code: ${code ? code.slice(0, 20) + '…' : 'MISSING'}`,
+      `sb-keys: ${sbKeys.join(', ') || 'NONE'}`,
+      `verifier: ${verifier || 'NOT FOUND'}`,
+    ].join('\n')
+
+    console.log('[auth/callback debug]\n' + debugStr)
+    setDebug(debugStr)
+
     if (!code) {
-      // No code in URL — might be an implicit-flow token already in the hash,
-      // or the user navigated here directly. Just forward them on.
       router.replace(next)
       return
     }
@@ -44,11 +52,9 @@ function CallbackHandler() {
         console.error('[auth/callback] exchangeCodeForSession failed:', error.message)
         setErrorMsg(error.message)
         setStatus('error')
-        setTimeout(() => router.replace(`/?auth_error=${encodeURIComponent(error.message)}`), 4000)
+        // Don't auto-redirect — keep debug info on screen
       } else {
         console.log('[auth/callback] session ok, user:', data.session?.user?.email)
-        // Hard navigation — ensures the destination page gets a clean load
-        // and reads the session from localStorage without a soft-nav race condition.
         window.location.href = next
       }
     })
@@ -57,12 +63,28 @@ function CallbackHandler() {
   if (status === 'error') {
     return (
       <div style={styles.center}>
-        <p style={styles.msg}>Sign-in failed — redirecting you home…</p>
-        {errorMsg && (
-          <p style={{ ...styles.msg, color: '#f87171', fontSize: '13px', maxWidth: '400px', textAlign: 'center' }}>
-            {errorMsg}
-          </p>
-        )}
+        <p style={styles.msg}>Sign-in failed</p>
+        <p style={{ ...styles.msg, color: '#f87171', fontSize: '13px', maxWidth: '500px', textAlign: 'center' }}>
+          {errorMsg}
+        </p>
+        <pre style={{
+          marginTop:   '24px',
+          padding:     '16px',
+          background:  '#1a1a2e',
+          borderRadius: '8px',
+          fontSize:    '11px',
+          color:       '#94a3b8',
+          maxWidth:    '500px',
+          width:       '100%',
+          whiteSpace:  'pre-wrap',
+          wordBreak:   'break-all',
+          textAlign:   'left',
+        }}>
+          {debug}
+        </pre>
+        <p style={{ ...styles.msg, fontSize: '12px', marginTop: '8px' }}>
+          📸 Screenshot this page and share it
+        </p>
       </div>
     )
   }
@@ -104,6 +126,7 @@ const styles = {
     background:     '#0C0C0E',
     color:          '#F0EEE8',
     fontFamily:     "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    padding:        '24px',
   },
   spinner: {
     width:       '32px',
