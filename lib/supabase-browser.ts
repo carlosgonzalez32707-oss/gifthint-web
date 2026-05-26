@@ -41,6 +41,11 @@ export function getBrowserClient(): SupabaseClient {
       autoRefreshToken: true,
       // Required for PKCE OAuth flow (code + verifier exchange)
       flowType: 'pkce',
+      // Disable automatic URL detection: supabase-js v2 auto-exchanges the
+      // PKCE code during client initialization (detectSessionInUrl: true by
+      // default), which removes the code_verifier from localStorage before
+      // our explicit exchangeCodeForSession() call can use it.
+      detectSessionInUrl: false,
     },
   })
 
