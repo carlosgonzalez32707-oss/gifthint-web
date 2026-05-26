@@ -82,10 +82,12 @@ export default function DashboardPage() {
   const [username,    setUsername]    = useState<string>('')
 
   // ── Auth guard — redirect to / when signed out ─────────────────────────────
+  // 300ms grace period lets onAuthStateChange fire INITIAL_SESSION before we
+  // treat a null session as definitively signed-out.
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.replace('/')
-    }
+    if (authLoading || user) return
+    const t = setTimeout(() => router.replace('/'), 300)
+    return () => clearTimeout(t)
   }, [authLoading, user, router])
 
   // ── Load wishlists ─────────────────────────────────────────────────────────

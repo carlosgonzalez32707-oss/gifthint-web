@@ -39,14 +39,17 @@ function CallbackHandler() {
     }
 
     const supabase = getBrowserClient()
-    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+    supabase.auth.exchangeCodeForSession(code).then(({ data, error }) => {
       if (error) {
         console.error('[auth/callback] exchangeCodeForSession failed:', error.message)
         setErrorMsg(error.message)
         setStatus('error')
         setTimeout(() => router.replace(`/?auth_error=${encodeURIComponent(error.message)}`), 4000)
       } else {
-        router.replace(next)
+        console.log('[auth/callback] session ok, user:', data.session?.user?.email)
+        // Hard navigation — ensures the destination page gets a clean load
+        // and reads the session from localStorage without a soft-nav race condition.
+        window.location.href = next
       }
     })
   }, [searchParams, router])
