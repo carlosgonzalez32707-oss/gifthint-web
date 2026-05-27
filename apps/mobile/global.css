@@ -1,0 +1,6 @@
+/* apps/mobile/global.css
+ * NativeWind v4 entry point — import this in app/_layout.tsx
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

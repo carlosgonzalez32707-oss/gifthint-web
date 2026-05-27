@@ -1,0 +1,18 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@/*": ["./*"],
+      "@gifthint/shared/types": ["../../packages/shared/src/types/index.ts"],
+      "@gifthint/shared/constants": ["../../packages/shared/src/constants/index.ts"],
+      "@gifthint/shared/utils": ["../../packages/shared/src/utils/index.ts"]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.d.ts",
+    "expo-env.d.ts"
+  ]
+}
