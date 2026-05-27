@@ -106,28 +106,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── Verify userId exists (lightweight auth guard) ──────────────────────────
-  // In production, replace this with proper session verification (cookies / JWT).
-  // This route is not yet guarded by a real auth session — see the note in the
-  // wisher dashboard implementation for the full auth story.
+  // ── JWT auth guard ──────────────────────────────────────────────────────────
+  // Verify the caller's Supabase Bearer token and confirm they own the userId
+  // in the request body. This prevents any caller from creating lists on behalf
+  // of other users by supplying an arbitrary userId.
 
-  const supabase = createServerClient()
-  const { data: userRow, error: userError } = await supabase
-    .from('users')
-    .select('id')
-    .eq('id', userId.trim())
-    .maybeSingle()
-
-  if (userError) {
-    console.error('[wishlists] user lookup error:', userError.message)
-    return NextResponse.json(
-      { error: 'server_error', message: userError.message },
-      { status: 500 },
-    )
+  const token = req.headers.get('Authorization')?.replace('Bearer ', '').trim()
+  if (!token) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  if (!userRow) {
+  const supabase = createServerClient()
+  const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token)
+
+  if (authError || !authUser) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
+  // The userId in the body must match the verified JWT subject
+  if (authUser.id !== userId.trim()) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
   // ── Create ─────────────────────────────────────────────────────────────────

@@ -25,9 +25,20 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { scrapeOG }                  from '@/lib/scrape-og'
+import { rateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 
 // Force Node.js runtime — the scraper uses fetch streaming and AbortController
 export const runtime = 'nodejs'
+
+// ── SSRF guard ─────────────────────────────────────────────────────────────────
+// Block requests targeting private/loopback addresses to prevent server-side
+// request forgery. Covers the most common cases via hostname string matching.
+
+const PRIVATE_HOST_RE = /^(localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|169\.254\.|::1$|fc00:|fd)/i
+
+function isPrivateHost(hostname: string): boolean {
+  return PRIVATE_HOST_RE.test(hostname)
+}
 
 // ── Shared handler ─────────────────────────────────────────────────────────────
 
@@ -35,7 +46,14 @@ function badRequest(message: string) {
   return NextResponse.json({ success: false, error: message }, { status: 400 })
 }
 
-async function handle(rawUrl: string | null) {
+async function handle(req: NextRequest, rawUrl: string | null) {
+  // Rate limit: 30 scrapes / IP / hour
+  const ip = getClientIp(req)
+  const rl = await rateLimit(`scrape:${ip}`, 30, 3600)
+  if (!rl.success) {
+    return rateLimitResponse(rl.reset)
+  }
+
   if (!rawUrl) {
     return badRequest('url parameter is required')
   }
@@ -52,6 +70,11 @@ async function handle(rawUrl: string | null) {
     return badRequest('Only http and https URLs are supported')
   }
 
+  // Block private/loopback destinations
+  if (isPrivateHost(parsed.hostname)) {
+    return badRequest('URL is not allowed')
+  }
+
   // Scrape
   try {
     const data = await scrapeOG(rawUrl)
@@ -66,7 +89,7 @@ async function handle(rawUrl: string | null) {
 
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get('url')
-  return handle(url)
+  return handle(req, url)
 }
 
 export async function POST(req: NextRequest) {
@@ -86,5 +109,5 @@ export async function POST(req: NextRequest) {
     ? String((body as Record<string, unknown>)['url'])
     : null
 
-  return handle(url)
+  return handle(req, url)
 }
