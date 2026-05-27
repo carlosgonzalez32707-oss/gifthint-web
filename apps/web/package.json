@@ -1,0 +1,52 @@
+{
+  "name": "@gifthint/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "build:chrome": "./browser-build.sh chrome",
+    "build:firefox": "./browser-build.sh firefox",
+    "build:edge": "./browser-build.sh edge",
+    "build:ext": "./browser-build.sh all"
+  },
+  "dependencies": {
+    "@hello-pangea/dnd": "^18.0.1",
+    "@react-email/components": "^1.0.12",
+    "@sentry/nextjs": "^10.53.1",
+    "@stripe/react-stripe-js": "^6.3.0",
+    "@stripe/stripe-js": "^9.5.0",
+    "@supabase/supabase-js": "2.74.0",
+    "@types/recharts": "^1.8.29",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.0",
+    "gray-matter": "^4.0.3",
+    "next": "14.2.3",
+    "next-mdx-remote": "^6.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-email": "^6.1.4",
+    "recharts": "^3.8.1",
+    "resend": "^3.5.0",
+    "stripe": "^22.1.1",
+    "@gifthint/shared": "*"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.12.12",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.19",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.2.3",
+    "jest": "^30.4.2",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.3",
+    "ts-jest": "^29.4.9",
+    "typescript": "^5.4.5"
+  }
+}
