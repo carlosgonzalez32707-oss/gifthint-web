@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "GiftHint — Save Gifts While You Shop",
   "version": "1.1.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtUj9O1eF8zk0ikboadEC28l4XaiWxfjbtu377CmJ4Z5lVqNLjeN0P2A4gShZhtTS6N0FR0sldW231SfHk28emjdI723wQ+aTtf143hPC+LI3CONfz/HvGhirYGNfB1dncFSVQOXTHTu+EcXRvl9mgFCOR6K8yXUcOPE+iIsRkqBSjkLGuPDMm+16wPc5K4HNHWEpWEhNFHVJeYhJiSM3gvit5ACGYeqLM/k5oUNPVYhnRdPiB1G4fJtX6pYXXecyedoSikfr9EPVdBFvQE8ATUq2szuik5kaj1EFU+tT6kFGQrT1TdkcgbHoDj+N0rgZNnIq7SYi58IwAIwqKc8FfQIDAQAB",
   "description": "Save products to wishlists on any retailer site. Multiple lists, occasion tagging, and one-click sharing — all from your browser.",
 
   "update_url": "https://edge.microsoft.com/extensionwebstorebase/v1/crx",

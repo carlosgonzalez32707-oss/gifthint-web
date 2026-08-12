@@ -2,6 +2,7 @@
   "manifest_version": 2,
   "name": "GiftHint — Save Gifts While You Shop",
   "version": "1.1.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0O/eB6YEF789YOSoGXcHBuifgsMKFjOMl9q9RItj05YXwrpVjEeO10tw6A3TIzvXTVi0N/G+HmacZ/G+TCAOemev7W07SE7ObvJ/hYlN4TKFYc0CAKvmfhsWPoX2ZIkVsaEvVmQccDIhi7UjuLf13BQxGpqMmkZfm13lakL1mxJRl/OBlWhUgvJaIaNlSjDrRbayblZgH9cTSTTBRIaZhX0MIGyqr3Z7/+jd+sOOOll8REvVzR/rGV/ftESnj5eZR0kx3r57Zgieb2ikRnPkCwE/lBMlWGJmtn7sXajDo3GMmDb9DPSuccEzsyQJSLkZzDpHsJq2PeOeW+3Bvo9ZrQIDAQAB",
   "description": "Save products to wishlists on any retailer site. Multiple lists, occasion tagging, and one-click sharing — all from your browser.",
 
   "browser_specific_settings": {

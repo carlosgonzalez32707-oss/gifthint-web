@@ -20,6 +20,8 @@ import Link                                 from 'next/link'
 import { createServerClient }               from '@/lib/supabase-server'
 import type { DbUser, DbWishlistItem }      from '@/lib/supabase-server'
 import { getWishlists, getOccasionMeta }    from '@/lib/wishlists'
+import { ViralCTABar }                      from '@/components/ViralCTABar'
+import { GifterFooter }                     from '@/components/GifterFooter'
 
 // ── Shared types (re-exported for child components) ───────────────────────────
 // GifterPage.tsx and [slug]/page.tsx import these from here.
@@ -121,7 +123,13 @@ export default async function Page({ params }: RouteProps) {
   if (!user) notFound()
 
   // 2. Fetch all public wishlists for this user
-  const wishlists = await getWishlists(user.id)
+  let wishlists: Awaited<ReturnType<typeof getWishlists>>
+  try {
+    wishlists = await getWishlists(user.id)
+  } catch (err) {
+    console.error('[GiftHint] profile page wishlists error:', err)
+    wishlists = []
+  }
 
   // 3. Single list → redirect directly (preserves old share-link behaviour)
   if (wishlists.length === 1) {
@@ -158,6 +166,8 @@ export default async function Page({ params }: RouteProps) {
   const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://gifthint.io'
 
   return (
+    <>
+    <ViralCTABar username={params.username} />
     <main style={{
       minHeight: '100vh',
       background: '#0C0C0E',
@@ -195,8 +205,7 @@ export default async function Page({ params }: RouteProps) {
         {/* ── List cards ──────────────────────────────────────────────────── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {wishlists.map((list) => {
-            const meta    = getOccasionMeta(list.occasion)
-            const listUrl = `${siteUrl}/list/${params.username}/${list.slug}`
+            const meta = getOccasionMeta(list.occasion)
 
             return (
               <Link
@@ -262,20 +271,9 @@ export default async function Page({ params }: RouteProps) {
           })}
         </div>
 
-        {/* ── Footer ──────────────────────────────────────────────────────── */}
-        <p style={{
-          marginTop: '40px',
-          textAlign: 'center',
-          fontSize:  '12px',
-          color:     '#7A7870',
-        }}>
-          Powered by{' '}
-          <a href={siteUrl} style={{ color: '#8B83F0', textDecoration: 'none' }}>
-            GiftHint ✨
-          </a>
-        </p>
-
       </div>
     </main>
+    <GifterFooter />
+    </>
   )
 }

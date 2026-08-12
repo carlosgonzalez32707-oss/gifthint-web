@@ -12,7 +12,8 @@
     "build:chrome": "./browser-build.sh chrome",
     "build:firefox": "./browser-build.sh firefox",
     "build:edge": "./browser-build.sh edge",
-    "build:ext": "./browser-build.sh all"
+    "build:ext": "./browser-build.sh all",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",

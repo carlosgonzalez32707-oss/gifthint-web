@@ -30,7 +30,7 @@ import { useOccasionTheme }                  from '@/components/OccasionThemeCon
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const DISMISS_KEY = 'gh_cta_dismissed'
-const CTA_HREF    = '/get-started'
+const CTA_HREF    = '/signin'
 const BAR_HEIGHT  = 44          // px — matches the fixed height in styles
 
 // ── Analytics (fire-and-forget) ───────────────────────────────────────────────
