@@ -22,7 +22,7 @@
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { useRouter }                        from 'next/navigation'
 import { tokens }                           from '@/tokens'
 import { useAuth }                          from '@/hooks/useAuth'
@@ -338,19 +338,30 @@ export default function DashboardPage() {
         {fetching ? (
           <LoadingSkeleton />
         ) : wishlists.length === 0 ? (
-          /* Empty state */
-          <div
-            style={{
-              textAlign:    'center',
-              padding:      '64px 24px',
-              border:       `1px dashed ${tokens.colors.border}`,
-              borderRadius: tokens.radius.xl,
-            }}
-          >
-            <div style={{ fontSize: '40px', marginBottom: '12px' }}>🎁</div>
-            <p style={{ color: tokens.colors.muted, fontSize: '14px', margin: 0 }}>
-              Create your first list and share it with friends!
-            </p>
+          /* Empty state — 3-path onboarding */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <OnboardingStep
+              icon="✨"
+              title="Start by creating a list"
+              body={'Hit "New list" above to create your first wishlist — name it for an occasion or keep it general.'}
+            />
+            <OnboardingStep
+              icon="🔗"
+              title="Add items two ways"
+              body={null}
+            >
+              <p style={{ margin: 0, fontSize: '13px', color: tokens.colors.muted, lineHeight: 1.5 }}>
+                <strong style={{ color: tokens.colors.text }}>Chrome extension</strong>{' '}
+                — save any product from any site with one click.{' '}
+                <strong style={{ color: tokens.colors.text }}>Or paste a URL</strong>{' '}
+                — open your list and drop a product link in the URL box.
+              </p>
+            </OnboardingStep>
+            <OnboardingStep
+              icon="🎁"
+              title="Share with the people buying your gifts"
+              body="Send friends and family your list link. They can browse, claim items, and coordinate — without spoiling the surprise."
+            />
           </div>
         ) : (
           <div
@@ -373,7 +384,6 @@ export default function DashboardPage() {
         )}
       </main>
 
-      {/* ── Create modal ─────────────────────────────────────────────────── */}
       {showModal && user && (
         <CreateListModal
           userId={user.id}
@@ -381,6 +391,47 @@ export default function DashboardPage() {
           onClose={() => setShowModal(false)}
         />
       )}
+    </div>
+  )
+}
+
+// ── OnboardingStep ────────────────────────────────────────────────────────────
+
+function OnboardingStep({
+  icon,
+  title,
+  body,
+  children,
+}: {
+  icon:      string
+  title:     string
+  body:      string | null
+  children?: ReactNode
+}) {
+  return (
+    <div
+      style={{
+        display:      'flex',
+        gap:          '16px',
+        alignItems:   'flex-start',
+        padding:      '20px 24px',
+        borderRadius: tokens.radius.lg,
+        background:   tokens.colors.surface,
+        border:       `1px solid ${tokens.colors.border}`,
+      }}
+    >
+      <div style={{ fontSize: '28px', flexShrink: 0, lineHeight: 1 }}>{icon}</div>
+      <div>
+        <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: '14px', color: tokens.colors.text }}>
+          {title}
+        </p>
+        {body && (
+          <p style={{ margin: 0, fontSize: '13px', color: tokens.colors.muted, lineHeight: 1.5 }}>
+            {body}
+          </p>
+        )}
+        {children}
+      </div>
     </div>
   )
 }

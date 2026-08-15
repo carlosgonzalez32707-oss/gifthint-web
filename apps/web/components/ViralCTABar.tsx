@@ -92,17 +92,36 @@ export function ViralCTABar({ username }: ViralCTABarProps) {
   // Start as null (unknown) to avoid SSR/hydration mismatch
   const [dismissed, setDismissed] = useState<boolean | null>(null)
 
-  // Read localStorage only on the client, after hydration
+  // Read localStorage only on the client, after hydration.
+  // Dismiss expires after 7 days; legacy 'true' values are cleared on next visit.
   useEffect(() => {
     try {
-      setDismissed(localStorage.getItem(DISMISS_KEY) === 'true')
+      const raw = localStorage.getItem(DISMISS_KEY)
+      if (!raw) {
+        setDismissed(false)
+        return
+      }
+      // Legacy: old value was the literal string 'true' — clear it and show the bar
+      if (raw === 'true') {
+        localStorage.removeItem(DISMISS_KEY)
+        setDismissed(false)
+        return
+      }
+      const ts = new Date(raw).getTime()
+      const sevenDays = 7 * 24 * 60 * 60 * 1000
+      if (!isNaN(ts) && Date.now() - ts < sevenDays) {
+        setDismissed(true)
+      } else {
+        localStorage.removeItem(DISMISS_KEY)
+        setDismissed(false)
+      }
     } catch {
       setDismissed(false)
     }
   }, [])
 
   const handleDismiss = useCallback(() => {
-    try { localStorage.setItem(DISMISS_KEY, 'true') } catch { /* private mode */ }
+    try { localStorage.setItem(DISMISS_KEY, new Date().toISOString()) } catch { /* private mode */ }
     setDismissed(true)
   }, [])
 

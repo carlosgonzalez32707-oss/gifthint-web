@@ -338,7 +338,7 @@ export default function LandingPage() {
               style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: c.purple, color: '#fff', borderRadius: 14, padding: '16px 36px', fontSize: 17, fontWeight: 800, letterSpacing: '-0.2px' }}>
               <ChromeIcon size={20} /> Add to Chrome — it&apos;s free
             </a>
-            <a href="/list/carlos"
+            <a href="/list/demo"
               style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 15, fontWeight: 600, color: c.purple, padding: '16px 20px', borderRadius: 14, border: `1.5px solid ${c.purpleRing}`, transition: 'background 150ms' }}
               className="gh-pill-hover">
               See example list →
@@ -450,23 +450,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ═══════════════════════════════════════ STATS STRIP ══ */}
-      <div style={{ borderTop: `1px solid ${c.border}`, borderBottom: `1px solid ${c.border}`, background: c.bgTint, padding: '24px 32px' }}>
-        <div style={{ maxWidth: 800, margin: '0 auto', display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '16px 48px' }}>
-          {[
-            { num: '10,000+', label: 'Active wishlists' },
-            { num: '500+',    label: 'Supported stores' },
-            { num: '4.9 ★',   label: 'Chrome Web Store' },
-            { num: '0',       label: 'Duplicate gifts' },
-          ].map(({ num, label }) => (
-            <div key={label} className="reveal" style={{ textAlign: 'center' }}>
-              <p style={{ fontSize: 'clamp(20px, 3vw, 28px)', fontWeight: 900, letterSpacing: '-0.5px', color: c.text }}>{num}</p>
-              <p style={{ fontSize: 12.5, color: c.muted, marginTop: 2 }}>{label}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* ═══════════════════════════════════════ MARQUEE ══ */}
       <div style={{ padding: '36px 0', overflow: 'hidden', background: c.bg }}>
         <p style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: c.mutedLight, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 20 }}>
@@ -568,6 +551,37 @@ export default function LandingPage() {
               </div>
             </div>
 
+          </div>
+
+          {/* Group gifting banner — full-width below the grid */}
+          <div className="card-hover reveal" style={{
+            marginTop: 16,
+            background: `linear-gradient(135deg, ${c.bgTintDeep} 0%, #F5F3FF 100%)`,
+            border: `1px solid ${c.purpleRing}`,
+            borderRadius: 20, padding: '24px 28px',
+            display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap',
+          }}>
+            <div style={{ fontSize: 36, flexShrink: 0 }}>🎊</div>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.3px', marginBottom: 6 }}>
+                Group gifting, sorted
+              </h3>
+              <p style={{ fontSize: 14, color: c.muted, lineHeight: 1.65, margin: 0 }}>
+                Friends can chip in together toward a single gift. No awkward Venmo requests after.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
+              {['🎁 Sarah chipped in $20', '🎁 Marcus chipped in $30', '🎁 Emma chipped in $25'].map((label) => (
+                <div key={label} style={{
+                  background: '#fff', border: `1px solid ${c.border}`,
+                  borderRadius: 999, padding: '6px 14px',
+                  fontSize: 12, fontWeight: 500, color: c.textSub,
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                }}>
+                  {label}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>

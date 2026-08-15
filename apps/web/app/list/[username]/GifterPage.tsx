@@ -16,7 +16,7 @@
 
 'use client'
 
-import { useState, useMemo, useCallback, lazy, Suspense, type ComponentType } from 'react'
+import { useState, useMemo, useCallback, useEffect, lazy, Suspense, type ComponentType } from 'react'
 import Image                              from 'next/image'
 import { createClient }                   from '@supabase/supabase-js'
 import { tokens }                         from '@/tokens'
@@ -66,6 +66,23 @@ const supabaseBrowser = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 )
 
+// ── Price-range filter presets ────────────────────────────────────────────────
+
+type PricePreset = 'all' | 'under25' | '25to75' | '75to150' | 'over150'
+
+const PRICE_PRESETS: {
+  label: string
+  key:   PricePreset
+  min:   number | null
+  max:   number | null
+}[] = [
+  { label: 'All prices', key: 'all',      min: null, max: null },
+  { label: 'Under $25',  key: 'under25',  min: null, max: 25   },
+  { label: '$25–$75',    key: '25to75',   min: 25,   max: 75   },
+  { label: '$75–$150',   key: '75to150',  min: 75,   max: 150  },
+  { label: '$150+',      key: 'over150',  min: 150,  max: null },
+]
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type GifterPageProps = {
@@ -79,8 +96,9 @@ type GifterPageProps = {
 
 export default function GifterPage({ user, items: initialItems, wishlist }: GifterPageProps) {
   // Optimistic claim updates live here — items prop is server-rendered initial state
-  const [items, setItems] = useState<WishItem[]>(initialItems)
-  const [activeTag, setActiveTag] = useState<string | null>(null)
+  const [items,       setItems]       = useState<WishItem[]>(initialItems)
+  const [activeTag,   setActiveTag]   = useState<string | null>(null)
+  const [pricePreset, setPricePreset] = useState<PricePreset>('all')
 
   const name    = user.display_name?.split(' ')[0] ?? user.public_username ?? 'Someone'
   const appUrl  = process.env.NEXT_PUBLIC_APP_URL ?? 'https://gifthint.io'
@@ -105,6 +123,35 @@ export default function GifterPage({ user, items: initialItems, wishlist }: Gift
     initialClaimed,
   )
 
+  // On mount: re-fetch claim fields to fix stale ISR data. The ISR window
+  // (revalidate = 10 s) means a page can serve cached HTML with outdated
+  // claimed state. A single lightweight select on hydration closes that gap.
+  useEffect(() => {
+    if (!wishlist) return
+    supabaseBrowser
+      .from('wishlist_items')
+      .select('id, is_claimed, claimed_by, claimed_anonymous, claimed_at')
+      .eq('wishlist_id', wishlist.id)
+      .then(({ data }) => {
+        if (!data) return
+        const freshMap = new Map(data.map((r) => [r.id, r]))
+        setItems((prev) =>
+          prev.map((item) => {
+            const fresh = freshMap.get(item.id)
+            if (!fresh) return item
+            return {
+              ...item,
+              is_claimed:        fresh.is_claimed,
+              claimed_by:        fresh.claimed_by,
+              claimed_anonymous: fresh.claimed_anonymous,
+              claimed_at:        fresh.claimed_at,
+            }
+          })
+        )
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wishlist?.id])
+
   // Merge server-fetched claimed state with live realtime updates.
   // An item is claimed if the DB said so at render time OR a live event arrived.
   const effectiveItems = useMemo<WishItem[]>(
@@ -124,11 +171,22 @@ export default function GifterPage({ user, items: initialItems, wishlist }: Gift
     return Array.from(seen)
   }, [effectiveItems])
 
-  // Apply tag filter client-side — no re-fetch needed
+  // Apply tag + price filters client-side — no re-fetch needed
   const visibleItems = useMemo<WishItem[]>(() => {
-    if (!activeTag) return effectiveItems
-    return effectiveItems.filter((item) => item.dna_tags.includes(activeTag))
-  }, [effectiveItems, activeTag])
+    let result = activeTag
+      ? effectiveItems.filter((item) => item.dna_tags.includes(activeTag))
+      : effectiveItems
+    if (pricePreset !== 'all') {
+      const preset = PRICE_PRESETS.find((p) => p.key === pricePreset)!
+      result = result.filter((item) => {
+        if (item.price == null) return true // items without price appear in every range
+        if (preset.min != null && item.price < preset.min) return false
+        if (preset.max != null && item.price >= preset.max) return false
+        return true
+      })
+    }
+    return result
+  }, [effectiveItems, activeTag, pricePreset])
 
   // Called by GiftCard after user confirms claim
   async function handleClaim(
@@ -239,12 +297,17 @@ export default function GifterPage({ user, items: initialItems, wishlist }: Gift
             />
           )}
 
+          <PriceFilterBar
+            activePreset={pricePreset}
+            onPresetChange={setPricePreset}
+          />
+
           <GiftGrid
             items={visibleItems}
             allItems={effectiveItems}
             name={name}
-            activeTag={activeTag}
-            onClearFilter={() => setActiveTag(null)}
+            hasActiveFilter={activeTag !== null || pricePreset !== 'all'}
+            onClearFilter={() => { setActiveTag(null); setPricePreset('all') }}
             onClaim={handleClaim}
             onUnclaim={handleUnclaim}
             wisherUserId={user.id}
@@ -341,6 +404,40 @@ function TagPill({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PriceFilterBar
+// ─────────────────────────────────────────────────────────────────────────────
+
+function PriceFilterBar({
+  activePreset,
+  onPresetChange,
+}: {
+  activePreset:   PricePreset
+  onPresetChange: (preset: PricePreset) => void
+}) {
+  return (
+    <div className="flex gap-2 px-4 pb-6 overflow-x-auto flex-wrap justify-center">
+      {PRICE_PRESETS.map((preset) => {
+        const active = activePreset === preset.key
+        return (
+          <button
+            key={preset.key}
+            onClick={() => onPresetChange(preset.key)}
+            className="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all"
+            style={{
+              background: active ? tokens.colors.green    : tokens.colors.surface2,
+              border:     `1px solid ${active ? tokens.colors.green : tokens.colors.border}`,
+              color:      active ? '#0a1a12'              : tokens.colors.muted,
+            }}
+          >
+            {preset.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GiftGrid
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -348,7 +445,7 @@ function GiftGrid({
   items,
   allItems,
   name,
-  activeTag,
+  hasActiveFilter,
   onClearFilter,
   onClaim,
   onUnclaim,
@@ -359,7 +456,8 @@ function GiftGrid({
   items:              WishItem[]
   allItems:           WishItem[]
   name:               string
-  activeTag:          string | null
+  /** True when any tag or price filter is active — shows "Clear filters" button */
+  hasActiveFilter:    boolean
   onClearFilter:      () => void
   onClaim:            (id: string, name: string, anon: boolean) => Promise<void>
   onUnclaim:          (itemId: string, claimedBy: string) => Promise<'ok' | 'mismatch' | 'error'>
@@ -391,7 +489,7 @@ function GiftGrid({
         <p className="font-semibold text-sm" style={{ color: tokens.colors.text }}>
           No items match this filter
         </p>
-        {activeTag && (
+        {hasActiveFilter && (
           <button
             onClick={onClearFilter}
             className="mt-1 px-4 py-2 rounded-full text-xs font-semibold transition-opacity hover:opacity-80"
@@ -401,7 +499,7 @@ function GiftGrid({
               color:      tokens.colors.muted,
             }}
           >
-            Clear filter
+            Clear filters
           </button>
         )}
       </div>

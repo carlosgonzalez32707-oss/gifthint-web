@@ -362,6 +362,16 @@ export default function ListDetailPage({
   // Bulk editor open/close
   const [bulkEditorOpen, setBulkEditorOpen] = useState(false)
 
+  // Share link
+  const [publicUsername, setPublicUsername] = useState<string>('')
+  const [linkCopied,     setLinkCopied]     = useState(false)
+
+  // URL-paste add item
+  const [urlInput,  setUrlInput]  = useState('')
+  const [urlSaving, setUrlSaving] = useState(false)
+  const [urlError,  setUrlError]  = useState<string | null>(null)
+  const [urlSaved,  setUrlSaved]  = useState(false)
+
   // Edit wishlist header
   const [editingHeader, setEditingHeader]   = useState(false)
   const [titleDraft,    setTitleDraft]      = useState('')
@@ -401,6 +411,14 @@ export default function ListDetailPage({
       setWishlist(wl)
       setTitleDraft(wl.title)
       setDateDraft(wl.occasion_date ?? '')
+
+      // Fetch public_username for the share link
+      const { data: profile } = await supabase
+        .from('users')
+        .select('public_username')
+        .eq('id', user!.id)
+        .single()
+      if (profile?.public_username) setPublicUsername(profile.public_username)
 
       // Fetch items belonging to this wishlist
       const { data: itemRows } = await supabase
@@ -520,6 +538,40 @@ export default function ListDetailPage({
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
   }, [])
+
+  const handleSaveUrl = useCallback(async () => {
+    const trimmed = urlInput.trim()
+    if (!trimmed || !wishlist) return
+    setUrlSaving(true)
+    setUrlError(null)
+
+    try {
+      const token = await getToken()
+      const res = await fetch('/api/save-url', {
+        method:  'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ url: trimmed, wishlist_id: wishlist.id }),
+      })
+
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        setUrlError(json.error ?? 'Failed to save item. Check the URL and try again.')
+        return
+      }
+
+      setItems((prev) => [json.item, ...prev])
+      setUrlInput('')
+      setUrlSaved(true)
+      setTimeout(() => setUrlSaved(false), 2500)
+    } catch {
+      setUrlError('Network error — please try again.')
+    } finally {
+      setUrlSaving(false)
+    }
+  }, [urlInput, wishlist])
 
   // ── Header save ────────────────────────────────────────────────────────────
 
@@ -755,6 +807,59 @@ export default function ListDetailPage({
           )}
         </div>
 
+        {/* ── Share link widget ────────────────────────────────────────────── */}
+        {publicUsername && (
+          <div
+            style={{
+              display:      'flex',
+              alignItems:   'center',
+              gap:          '12px',
+              background:   tokens.colors.surface,
+              border:       `1px solid ${tokens.colors.border}`,
+              borderRadius: tokens.radius.md,
+              padding:      '14px 18px',
+              marginBottom: '20px',
+            }}
+          >
+            <span
+              style={{
+                fontFamily:   'monospace',
+                fontSize:     '13px',
+                color:        tokens.colors.muted,
+                overflow:     'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace:   'nowrap',
+                flex:         1,
+              }}
+            >
+              {`${process.env.NEXT_PUBLIC_APP_URL ?? 'https://gifthint.io'}/list/${publicUsername}/${wishlist.slug}`}
+            </span>
+            <button
+              onClick={() => {
+                const url = `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://gifthint.io'}/list/${publicUsername}/${wishlist.slug}`
+                navigator.clipboard.writeText(url).catch(() => {})
+                setLinkCopied(true)
+                setTimeout(() => setLinkCopied(false), 2000)
+              }}
+              style={{
+                background:   linkCopied ? '#4ADE80' : theme.accent,
+                color:        linkCopied ? '#0a2010' : '#fff',
+                border:       'none',
+                borderRadius: tokens.radius.sm,
+                padding:      '7px 14px',
+                fontSize:     '12px',
+                fontWeight:   700,
+                cursor:       'pointer',
+                flexShrink:   0,
+                whiteSpace:   'nowrap',
+                transition:   'background 150ms ease, color 150ms ease',
+              }}
+            >
+              {linkCopied ? 'Copied ✓' : 'Copy link'}
+            </button>
+          </div>
+        )}
+
         {/* ── Items (drag-to-reorder) ──────────────────────────────────────── */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -893,6 +998,85 @@ export default function ListDetailPage({
               and click the button on any product page to add it here.
             </p>
           </div>
+        </div>
+
+        {/* ── URL-paste fallback ───────────────────────────────────────────── */}
+        <div style={{ marginTop: '16px' }}>
+          <p
+            style={{
+              margin:        '0 0 8px',
+              fontSize:      '11px',
+              fontWeight:    700,
+              color:         tokens.colors.muted,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+            }}
+          >
+            Or paste a product URL
+          </p>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              type="url"
+              value={urlInput}
+              onChange={(e) => {
+                setUrlInput(e.target.value)
+                setUrlError(null)
+                setUrlSaved(false)
+              }}
+              placeholder="https://amazon.com/dp/..."
+              disabled={urlSaving}
+              style={{
+                flex:         1,
+                background:   tokens.colors.surface2,
+                border:       `1px solid ${urlError ? '#E24B4A66' : tokens.colors.border}`,
+                borderRadius: tokens.radius.sm,
+                padding:      '10px 14px',
+                color:        tokens.colors.text,
+                fontSize:     '14px',
+                outline:      'none',
+                opacity:      urlSaving ? 0.6 : 1,
+              }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = theme.accent }}
+              onBlur={(e)  => { e.currentTarget.style.borderColor = urlError ? '#E24B4A66' : tokens.colors.border }}
+              onKeyDown={async (e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  await handleSaveUrl()
+                }
+              }}
+            />
+            <button
+              onClick={handleSaveUrl}
+              disabled={urlSaving || !urlInput.trim()}
+              style={{
+                background:   urlSaved ? '#4ADE80' : theme.accent,
+                color:        urlSaved ? '#0a2010' : '#fff',
+                border:       'none',
+                borderRadius: tokens.radius.sm,
+                padding:      '10px 18px',
+                fontSize:     '13px',
+                fontWeight:   700,
+                cursor:       urlSaving || !urlInput.trim() ? 'not-allowed' : 'pointer',
+                opacity:      urlSaving || !urlInput.trim() ? 0.5 : 1,
+                whiteSpace:   'nowrap',
+                transition:   'background 150ms ease, color 150ms ease',
+              }}
+            >
+              {urlSaving ? 'Saving…' : urlSaved ? 'Saved ✓' : 'Save item'}
+            </button>
+          </div>
+          {urlError && (
+            <p
+              style={{
+                margin:    '6px 0 0',
+                fontSize:  '12px',
+                color:     '#FB7185',
+                lineHeight: 1.4,
+              }}
+            >
+              {urlError}
+            </p>
+          )}
         </div>
 
       </main>

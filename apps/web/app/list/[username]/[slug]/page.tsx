@@ -30,8 +30,8 @@ import {
   type SchemaItem,
 }                                            from '@/lib/structured-data'
 
-// ── ISR — revalidate cached page every 60 s so claim counts stay fresh ───────
-export const revalidate = 60
+// ── ISR — revalidate cached page every 10 s so claim counts stay fresh ───────
+export const revalidate = 10
 
 // ── Re-export shared prop types ───────────────────────────────────────────────
 // GifterPage.tsx imports these from the parent page; we re-export for convenience.
