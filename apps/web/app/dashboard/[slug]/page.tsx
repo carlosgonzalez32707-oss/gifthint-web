@@ -988,7 +988,7 @@ export default function ListDetailPage({
             >
               Install the{' '}
               <a
-                href={process.env.NEXT_PUBLIC_CHROME_STORE_URL ?? 'https://chromewebstore.google.com/detail/gifthint/PLACEHOLDER'}
+                href={process.env.NEXT_PUBLIC_CHROME_STORE_URL ?? '/signin'}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ color: theme.accent, textDecoration: 'underline' }}

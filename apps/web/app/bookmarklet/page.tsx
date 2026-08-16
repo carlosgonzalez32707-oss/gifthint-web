@@ -66,7 +66,7 @@ export default function BookmarkletPage() {
             <span style={{ fontWeight: 700, fontSize: '15px', color: '#F0EEE8' }}>GiftHint</span>
           </a>
           <a
-            href="https://chromewebstore.google.com/detail/gifthint"
+            href="/signin"
             style={{
               fontSize: '12px', color: '#7A7870', textDecoration: 'none',
               padding: '6px 12px', borderRadius: '999px',
@@ -296,7 +296,7 @@ export default function BookmarkletPage() {
             The full Chrome extension is faster and shows a floating button on every product page.
           </p>
           <a
-            href="https://chromewebstore.google.com/detail/gifthint"
+            href="/signin"
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '8px',
               padding: '12px 24px', borderRadius: '10px',

@@ -85,8 +85,7 @@ const c = {
 }
 const font = "var(--font-inter), system-ui, -apple-system, 'Segoe UI', sans-serif"
 const CHROME_STORE_URL =
-  process.env.NEXT_PUBLIC_CHROME_STORE_URL ??
-  'https://chromewebstore.google.com/detail/gifthint/PLACEHOLDER'
+  process.env.NEXT_PUBLIC_CHROME_STORE_URL ?? '/signin'
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
