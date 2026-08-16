@@ -54,9 +54,10 @@ const c = {
 }
 const font = "var(--font-inter), system-ui, -apple-system, 'Segoe UI', sans-serif"
 
+// Falls back to /signin until the extension is published on the Chrome Web Store.
+// Set NEXT_PUBLIC_CHROME_STORE_URL in Vercel env vars once the extension is live.
 const CHROME_STORE_URL =
-  process.env.NEXT_PUBLIC_CHROME_STORE_URL ??
-  'https://chromewebstore.google.com/detail/gifthint/PLACEHOLDER'
+  process.env.NEXT_PUBLIC_CHROME_STORE_URL ?? '/signin'
 
 // ── All CSS animations + styles ───────────────────────────────────────────────
 
